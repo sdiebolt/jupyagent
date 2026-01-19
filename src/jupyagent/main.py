@@ -1,32 +1,28 @@
 #!/usr/bin/env python3
+import json
 import os
-import sys
 import platform
 import subprocess
-import json
-import asyncio
+import sys
 import webbrowser
 from pathlib import Path
 
 try:
+    from textual import on, work
     from textual.app import App, ComposeResult
-    from textual.containers import Container, Vertical, Horizontal
+    from textual.containers import Container
+    from textual.screen import Screen
     from textual.widgets import (
-        Header,
-        Footer,
         Button,
-        Static,
+        Footer,
+        Header,
         Input,
-        RadioSet,
-        RadioButton,
         Label,
         Log,
+        Static,
     )
-    from textual.screen import Screen
-    from textual import on, work
 except ImportError:
     print("Error: 'textual' library is required.")
-    print("Please install it via: pip install textual")
     sys.exit(1)
 
 # --- Constants ---
@@ -69,26 +65,11 @@ def generate_docker_files(config):
     agent_dir = CONFIG_DIR / "agent"
     agent_dir.mkdir(exist_ok=True)
 
-    agent_type = config.get("agent_type", "opencode")
-
-    dockerfile_content = ""
-    if agent_type == "opencode":
-        dockerfile_content = """FROM python:3.10-slim
+    # Always Opencode now
+    dockerfile_content = """FROM python:3.10-slim
 WORKDIR /workspace
 RUN pip install requests sseclient-py anthropic
 CMD ["python", "-c", "import time; print('Opencode Agent Started. (Placeholder)'); time.sleep(9999)"]
-"""
-    elif agent_type == "claude":
-        dockerfile_content = """FROM node:20-slim
-WORKDIR /workspace
-RUN npm install -g @anthropic-ai/claude-code
-CMD ["claude"]
-"""
-    elif agent_type == "gemini":
-        dockerfile_content = """FROM python:3.10-slim
-WORKDIR /workspace
-RUN pip install google-generativeai
-CMD ["bash"] 
 """
 
     with open(agent_dir / "Dockerfile", "w") as f:
@@ -96,10 +77,10 @@ CMD ["bash"]
 
     with open(ENV_FILE, "w") as f:
         f.write(f"JUPYTER_TOKEN={config.get('jupyter_token', 'secure-token')}\n")
-        f.write(f"API_KEY={config.get('api_key', '')}\n")
         f.write(f"RO_PATH={config['ro_path']}\n")
         f.write(f"RW_PATH={config['rw_path']}\n")
 
+    # Pass ANTHROPIC_API_KEY from host to container
     compose_content = """version: '3.8'
 
 services:
@@ -128,9 +109,8 @@ services:
       - ${RO_PATH}:/mnt/ro_data:ro
       - ${RW_PATH}:/workspace:rw
     environment:
-      - ANTHROPIC_API_KEY=${API_KEY}
-      - OPENAI_API_KEY=${API_KEY}
-      - GOOGLE_API_KEY=${API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - JUPYTER_URL=http://jupyter:8888
       - JUPYTER_TOKEN=${JUPYTER_TOKEN}
     working_dir: /workspace
@@ -182,15 +162,8 @@ class SetupScreen(Screen):
 
         yield Container(
             Label("[b]JupyAgent Setup[/b]", classes="header"),
-            Label("Select Agent:"),
-            RadioSet(
-                RadioButton("Opencode (Custom)", id="opencode", value=True),
-                RadioButton("Claude Code", id="claude"),
-                RadioButton("Gemini CLI", id="gemini"),
-                id="agent_select",
-            ),
-            Label("API Key:"),
-            Input(placeholder="sk-...", password=True, id="api_key"),
+            # Removed Agent Selection (Defaulting to Opencode)
+            # Removed API Key Input
             Label("Read-Only Path (System Drive):"),
             Input(value=defaults["ro_path"], id="ro_path"),
             Label("Read-Write Path (Workspace):"),
@@ -200,15 +173,8 @@ class SetupScreen(Screen):
 
     @on(Button.Pressed, "#save_btn")
     def on_save(self):
-        agent = "opencode"
-        if self.query_one("#claude", RadioButton).value:
-            agent = "claude"
-        if self.query_one("#gemini", RadioButton).value:
-            agent = "gemini"
-
         config = {
-            "agent_type": agent,
-            "api_key": self.query_one("#api_key", Input).value,
+            "agent_type": "opencode",
             "ro_path": str(Path(self.query_one("#ro_path", Input).value).resolve()),
             "rw_path": str(Path(self.query_one("#rw_path", Input).value).resolve()),
             "jupyter_token": "token123",
@@ -246,6 +212,7 @@ class BuildScreen(Screen):
     def run_build(self):
         log = self.query_one(Log)
         try:
+            # Pass current env to ensure we don't lose anything vital, though build shouldn't need keys
             process = subprocess.Popen(
                 ["docker", "compose", "-f", str(COMPOSE_FILE), "build"],
                 cwd=CONFIG_DIR,
@@ -349,9 +316,11 @@ class DashboardScreen(Screen):
         self.app.suspend_application_mode()
         try:
             print("Launching Agent Shell... (Type 'exit' or Ctrl+C to return)")
+            # Pass environment variables to the subprocess so docker compose can pick them up
             subprocess.run(
                 ["docker", "compose", "-f", str(COMPOSE_FILE), "run", "--rm", "agent"],
                 cwd=CONFIG_DIR,
+                env=os.environ.copy(),  # Important: Pass current env (with API keys) to docker compose
             )
         except Exception as e:
             print(f"Error: {e}")
@@ -366,12 +335,14 @@ class DashboardScreen(Screen):
     @work(thread=True)
     def run_docker_cmd(self, args):
         try:
+            # Pass environment variables here too
             subprocess.run(
                 ["docker", "compose", "-f", str(COMPOSE_FILE)] + args,
                 cwd=CONFIG_DIR,
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                env=os.environ.copy(),
             )
             self.app.call_from_thread(self.check_status_periodic)
             action = "Started" if "up" in args else "Stopped"
@@ -397,6 +368,6 @@ class JupyAgentApp(App):
             self.switch_mode("setup")
 
 
-if __name__ == "__main__":
+def run():
     app = JupyAgentApp()
     app.run()

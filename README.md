@@ -1,50 +1,49 @@
 # JupyAgent
 
-**JupyAgent** is a unified installer and manager for a sandboxed LLM Agent environment. It sets up a secure workspace with a Jupyter Server, a Jupyter MCP Server, and an LLM Agent (like Opencode or Claude Code).
+**JupyAgent** is a unified manager for a sandboxed LLM Agent environment. It sets up a secure workspace with a Jupyter Server, a Jupyter MCP Server, and the **Opencode** Agent.
 
 ## Features
-- **One-Command Install:** Easy setup on Windows, Linux, and macOS.
-- **Sandboxed Security:** Agents are restricted to a specific workspace directory (`rw`) and can only read other drives (`ro`).
+- **Secure Sandbox:** Agents are restricted to a specific workspace directory (`rw`) and can only read other drives (`ro`).
 - **Integrated Stack:** Jupyter Lab + Jupyter MCP + LLM Agent pre-wired.
 - **Cross-Platform:** Works seamlessly on Windows and Linux via Docker.
+- **TUI Dashboard:** Modern terminal interface to manage services.
+
+## Prerequisites
+1. **Docker:** Must be installed and running.
+2. **uv:** The Python package manager. [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
 
 ## Installation
 
-### Linux / macOS
+You can run JupyAgent directly without installing it using `uvx`:
+
 ```bash
-curl -Ls https://raw.githubusercontent.com/sdiebolt/jupyagent/main/install.sh | bash
+# Export your API Key first (Required for the Agent)
+export ANTHROPIC_API_KEY="sk-..."
+
+# Run from GitHub
+uvx --from git+https://github.com/sdiebolt/jupyagent jupyagent
 ```
 
-### Windows (PowerShell)
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/sdiebolt/jupyagent/main/install.ps1 | iex"
+Or install it permanently:
+
+```bash
+uv tool install git+https://github.com/sdiebolt/jupyagent
+```
+
+Then run:
+```bash
+jupyagent
 ```
 
 ## Usage
 
-Once installed, use the `jupyagent` command:
+1. **Setup (First Run):**
+   The tool will ask you to configure your **Read-Only System Path** (for the agent to read context) and your **Read-Write Workspace** (where the agent saves files).
 
-1. **Setup:**
-   On first run, it will ask for your configuration (API keys, paths).
-   ```bash
-   jupyagent
-   ```
+2. **Dashboard:**
+   - **Start Services:** Launches Jupyter Lab and the MCP Server in the background.
+   - **Launch Agent:** Drops you into the interactive Opencode Agent shell inside the Docker container.
+   - **Open Jupyter:** Opens the Jupyter Lab interface in your browser.
 
-2. **Start:**
-   Launches the environment.
-   ```bash
-   jupyagent start
-   ```
-
-3. **Stop:**
-   Stops all containers.
-   ```bash
-   jupyagent stop
-   ```
-
-## Configuration
-
-Configuration is stored in `~/.jupyagent/config.json`. You can re-run the setup wizard at any time:
-```bash
-jupyagent setup
-```
+## Security Note
+API Keys are **not** stored in the configuration file. You must set the `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) environment variable in your shell before running `jupyagent`. The tool passes these variables directly to the Docker container at runtime.
