@@ -131,7 +131,7 @@ WORKDIR /workspace
 RUN apt-get update && apt-get install -y curl bash git
 RUN curl -fsSL https://opencode.ai/install | bash
 ENV PATH="/root/.local/bin:${PATH}"
-CMD ["opencode", "web"]
+CMD ["opencode", "web", "--port", "3000", "--hostname", "0.0.0.0"]
 """
     with open(agent_dir / "Dockerfile", "w") as f:
         f.write(dockerfile_content)
@@ -253,7 +253,7 @@ def cmd_setup():
         sys.exit(1)
 
 
-def cmd_start():
+def cmd_start() -> str:
     if not CONFIG_JSON.exists():
         console.print("[error]Not configured.[/error] Run setup first.")
         cmd_setup()
@@ -280,13 +280,12 @@ def cmd_start():
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        console.print("[success]Services started.[/success]")
+        return "[success]Services started successfully.[/success]"
     except subprocess.CalledProcessError:
-        console.print("[error]Failed to start services.[/error]")
-        sys.exit(1)
+        return "[error]Failed to start services.[/error]"
 
 
-def cmd_launch_agent():
+def cmd_launch_agent() -> str:
     console.print("[highlight]Starting Agent Web Interface...[/highlight]")
     console.print("[info]Once running, open: http://localhost:3000[/info]")
     try:
@@ -296,22 +295,25 @@ def cmd_launch_agent():
             env=os.environ.copy(),
         )
         webbrowser.open("http://localhost:3000")
+        return "[success]Agent launched in background.[/success]"
     except subprocess.CalledProcessError:
-        console.print("[error]Failed to start Agent service.[/error]")
+        return "[error]Failed to start Agent service.[/error]"
 
 
-def cmd_open_jupyter():
+def cmd_open_jupyter() -> str:
     config = load_config()
     if config:
         token = config.get("jupyter_token", "token123")
         url = f"http://localhost:8888/lab?token={token}"
         console.print(f"Opening Jupyter: [link]{url}[/link]")
         webbrowser.open(url)
+        return f"[info]Opened Jupyter at {url}[/info]"
+    return "[error]Config not found.[/error]"
 
 
-def cmd_stop():
+def cmd_stop() -> str:
     if not CONFIG_JSON.exists():
-        return
+        return "[warning]Not set up.[/warning]"
     console.print("[warning]Stopping services...[/warning]")
     subprocess.run(
         DOCKER_CMD + ["compose", "-f", str(COMPOSE_FILE), "down"],
@@ -319,10 +321,10 @@ def cmd_stop():
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    console.print("[success]Stopped.[/success]")
+    return "[success]Services stopped.[/success]"
 
 
-def cmd_dashboard():
+def cmd_dashboard(msg=""):
     """Simple Menu-based Dashboard"""
     while True:
         # Status Check
@@ -340,6 +342,25 @@ def cmd_dashboard():
             )
         )
 
+        if msg:
+            console.print(f"{msg}\n")
+            msg = ""  # Clear after displaying
+
+        # Display Access Info if running
+        if is_service_running():
+            config = load_config()
+            token = config.get("jupyter_token", "token123") if config else "..."
+            console.print(
+                Panel(
+                    f"[bold]Access Information:[/bold]\n"
+                    f"  Jupyter Lab:  [link]http://localhost:8888/lab?token={token}[/link]\n"
+                    f"  Opencode UI:  [link]http://localhost:3000[/link]",
+                    border_style="green",
+                    title="Services Active",
+                )
+            )
+            console.print("")
+
         console.print("1. [bold green]Start[/bold green] Services")
         console.print("2. [bold red]Stop[/bold red] Services")
         console.print("3. [bold cyan]Launch[/bold cyan] Agent Web UI")
@@ -352,19 +373,16 @@ def cmd_dashboard():
         )
 
         if choice == "1":
-            cmd_start()
-            Prompt.ask("Press Enter to continue...")
+            msg = cmd_start()
         elif choice == "2":
-            cmd_stop()
-            Prompt.ask("Press Enter to continue...")
+            msg = cmd_stop()
         elif choice == "3":
-            cmd_launch_agent()
+            msg = cmd_launch_agent()
         elif choice == "4":
-            cmd_open_jupyter()
-            Prompt.ask("Press Enter to continue...")
+            msg = cmd_open_jupyter()
         elif choice == "5":
-            cmd_setup()
-            Prompt.ask("Press Enter to continue...")
+            cmd_setup()  # Setup has its own prompts
+            msg = "[success]Configuration updated.[/success]"
         elif choice == "6":
             console.print("Bye!")
             break
