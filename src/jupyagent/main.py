@@ -9,12 +9,12 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from rich.console import Console
-    from rich.prompt import Prompt, Confirm
-    from rich.panel import Panel
-    from rich.markdown import Markdown
-    from rich.theme import Theme
     import questionary
+    from rich.console import Console
+    from rich.markdown import Markdown
+    from rich.panel import Panel
+    from rich.prompt import Confirm, Prompt
+    from rich.theme import Theme
 except ImportError:
     print("Error: 'rich' and 'questionary' libraries are required.")
     sys.exit(1)
@@ -130,12 +130,37 @@ def generate_docker_files(config: dict):
     dockerfile_content = """FROM python:3.10-slim
 WORKDIR /workspace
 RUN apt-get update && apt-get install -y curl bash git tar
+RUN pip install uv
 RUN curl -fsSL https://opencode.ai/install | bash
 ENV PATH="/root/.opencode/bin:${PATH}"
+
+# Install Jupyter MCP server locally
+RUN uv pip install mcp-server-jupyter
+
+# Copy the pre-generated config file
+COPY opencode.json .
+
 CMD ["opencode", "web", "--port", "3000", "--hostname", "0.0.0.0"]
 """
     with open(agent_dir / "Dockerfile", "w") as f:
         f.write(dockerfile_content)
+
+    # opencode.json (Auto-config)
+    opencode_config = {
+        "mcpServers": {
+            "jupyter": {
+                "command": "mcp-server-jupyter",
+                "args": [
+                    "--url",
+                    "http://jupyter:8888",
+                    "--token",
+                    config.get("jupyter_token", "secure-token"),
+                ],
+            }
+        }
+    }
+    with open(agent_dir / "opencode.json", "w") as f:
+        json.dump(opencode_config, f, indent=2)
 
     # .env file
     with open(ENV_FILE, "w") as f:
@@ -153,16 +178,7 @@ CMD ["opencode", "web", "--port", "3000", "--hostname", "0.0.0.0"]
       - JUPYTER_TOKEN=${JUPYTER_TOKEN}
     volumes:
       - ${RO_PATH}:/mnt/ro_data:ro
-      - ${RW_PATH}:/home/jovyan/work:rw
-
-  mcp-server:
-    image: datalayer/jupyter-mcp-server:latest
-    environment:
-      - JUPYTER_URL=http://jupyter:8888
-      - JUPYTER_TOKEN=${JUPYTER_TOKEN}
-      - ALLOW_IMG_OUTPUT=true
-    depends_on:
-      - jupyter
+      - ${RW_PATH}:/workspace:rw # Agent and Jupyter use the same path
 
   agent:
     build: ./agent
@@ -178,7 +194,7 @@ CMD ["opencode", "web", "--port", "3000", "--hostname", "0.0.0.0"]
     stdin_open: true 
     tty: true
     depends_on:
-      - mcp-server
+      - jupyter
 """
     with open(COMPOSE_FILE, "w") as f:
         f.write(compose_content)
