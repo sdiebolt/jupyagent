@@ -14,8 +14,9 @@ try:
     from rich.panel import Panel
     from rich.markdown import Markdown
     from rich.theme import Theme
+    import questionary
 except ImportError:
-    print("Error: 'rich' library is required.")
+    print("Error: 'rich' and 'questionary' libraries are required.")
     sys.exit(1)
 
 # --- Constants ---
@@ -354,29 +355,46 @@ def cmd_dashboard(msg=""):
             )
             console.print("")
 
-        console.print("1. [bold green]Start[/bold green] Services")
-        console.print("2. [bold red]Stop[/bold red] Services")
-        console.print("3. [bold cyan]Launch[/bold cyan] Agent Web UI")
-        console.print("4. [bold yellow]Open[/bold yellow] Jupyter Lab")
-        console.print("5. [bold]Re-configure[/bold]")
-        console.print("6. [dim]Exit[/dim]")
+        choices = [
+            "Start Services",
+            "Stop Services",
+            "Launch Agent Web UI",
+            "Open Jupyter Lab",
+            "Re-configure",
+            "Exit",
+        ]
 
-        choice = Prompt.ask(
-            "\nChoose an option", choices=["1", "2", "3", "4", "5", "6"], default="6"
-        )
+        choice = questionary.select(
+            "Choose an action:",
+            choices=choices,
+            style=questionary.Style(
+                [
+                    ("qmark", "fg:#673ab7 bold"),
+                    ("question", "bold"),
+                    ("answer", "fg:#f44336 bold"),
+                    ("pointer", "fg:#673ab7 bold"),
+                    ("highlighted", "fg:#673ab7 bold"),
+                    ("selected", "fg:#cc5454"),
+                    ("separator", "fg:#cc5454"),
+                    ("instruction", ""),
+                    ("text", ""),
+                    ("disabled", "fg:#858585 italic"),
+                ]
+            ),
+        ).ask()
 
-        if choice == "1":
+        if choice == "Start Services":
             msg = cmd_start()
-        elif choice == "2":
+        elif choice == "Stop Services":
             msg = cmd_stop()
-        elif choice == "3":
+        elif choice == "Launch Agent Web UI":
             msg = cmd_launch_agent()
-        elif choice == "4":
+        elif choice == "Open Jupyter Lab":
             msg = cmd_open_jupyter()
-        elif choice == "5":
+        elif choice == "Re-configure":
             cmd_setup()  # Setup has its own prompts
             msg = "[success]Configuration updated.[/success]"
-        elif choice == "6":
+        elif choice == "Exit":
             console.print("Bye!")
             break
 
