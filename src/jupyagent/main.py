@@ -370,16 +370,6 @@ class JupyAgentApp(App):
     MODES = {"setup": SetupScreen, "dashboard": DashboardScreen}
 
     def on_mount(self):
-        if not check_docker():
-            print("Error: Docker is not installed.")
-            self.exit()
-            return
-
-        if not check_docker_running():
-            print("Error: Docker daemon is not running. Please start Docker.")
-            self.exit()
-            return
-
         config = load_config()
         if config:
             self.switch_mode("dashboard")
@@ -388,5 +378,13 @@ class JupyAgentApp(App):
 
 
 def run():
+    if not check_docker():
+        print("Error: Docker is not installed.")
+        sys.exit(1)
+
+    if not check_docker_running():
+        print("Error: Docker daemon is not running. Please start Docker.")
+        sys.exit(1)
+
     app = JupyAgentApp()
     app.run()
