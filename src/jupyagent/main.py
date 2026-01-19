@@ -129,9 +129,9 @@ def generate_docker_files(config: dict):
     # Agent Dockerfile (Opencode)
     dockerfile_content = """FROM python:3.10-slim
 WORKDIR /workspace
-RUN apt-get update && apt-get install -y curl bash git
+RUN apt-get update && apt-get install -y curl bash git tar
 RUN curl -fsSL https://opencode.ai/install | bash
-ENV PATH="/root/.local/bin:${PATH}"
+ENV PATH="/root/.opencode/bin:${PATH}"
 CMD ["opencode", "web", "--port", "3000", "--hostname", "0.0.0.0"]
 """
     with open(agent_dir / "Dockerfile", "w") as f:
