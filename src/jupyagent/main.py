@@ -137,7 +137,6 @@ CMD ["opencode", "web"]
     # .env file
     with open(ENV_FILE, "w") as f:
         f.write(f"JUPYTER_TOKEN={config.get('jupyter_token', 'secure-token')}\n")
-        f.write(f"API_KEY={config.get('api_key', '')}\n")
         f.write(f"RO_PATH={config['ro_path']}\n")
         f.write(f"RW_PATH={config['rw_path']}\n")
 
@@ -170,8 +169,6 @@ CMD ["opencode", "web"]
       - ${RO_PATH}:/mnt/ro_data:ro
       - ${RW_PATH}:/workspace:rw
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - JUPYTER_URL=http://jupyter:8888
       - JUPYTER_TOKEN=${JUPYTER_TOKEN}
     working_dir: /workspace
@@ -212,15 +209,6 @@ def cmd_setup():
         "rw_path": str(Path.home() / "jupyagent"),
     }
 
-    # API Key
-    api_key = Prompt.ask(
-        "Enter your [bold]Anthropic API Key[/bold] (stored locally)", password=True
-    )
-    if not api_key:
-        console.print(
-            "[warning]No API Key provided. Agent may not function correctly.[/warning]"
-        )
-
     # Paths
     ro_path = Prompt.ask(
         "Read-Only System Path (Context for Agent)", default=defaults["ro_path"]
@@ -241,7 +229,6 @@ def cmd_setup():
     # Processing
     config = {
         "agent_type": "opencode",
-        "api_key": api_key,
         "ro_path": str(Path(ro_path).resolve()),
         "rw_path": str(Path(rw_path).resolve()),
         "jupyter_token": "token123",
