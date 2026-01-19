@@ -77,6 +77,7 @@ CMD ["python", "-c", "import time; print('Opencode Agent Started. (Placeholder)'
 
     with open(ENV_FILE, "w") as f:
         f.write(f"JUPYTER_TOKEN={config.get('jupyter_token', 'secure-token')}\n")
+        f.write(f"API_KEY={config.get('api_key', '')}\n")
         f.write(f"RO_PATH={config['ro_path']}\n")
         f.write(f"RW_PATH={config['rw_path']}\n")
 
@@ -109,8 +110,8 @@ services:
       - ${RO_PATH}:/mnt/ro_data:ro
       - ${RW_PATH}:/workspace:rw
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${API_KEY}
+      - OPENAI_API_KEY=${API_KEY}
       - JUPYTER_URL=http://jupyter:8888
       - JUPYTER_TOKEN=${JUPYTER_TOKEN}
     working_dir: /workspace
@@ -162,8 +163,9 @@ class SetupScreen(Screen):
 
         yield Container(
             Label("[b]JupyAgent Setup[/b]", classes="header"),
-            # Removed Agent Selection (Defaulting to Opencode)
-            # Removed API Key Input
+            # Re-enabled API Key Input
+            Label("API Key:"),
+            Input(placeholder="sk-...", password=True, id="api_key"),
             Label("Read-Only Path (System Drive):"),
             Input(value=defaults["ro_path"], id="ro_path"),
             Label("Read-Write Path (Workspace):"),
@@ -175,6 +177,7 @@ class SetupScreen(Screen):
     def on_save(self):
         config = {
             "agent_type": "opencode",
+            "api_key": self.query_one("#api_key", Input).value,
             "ro_path": str(Path(self.query_one("#ro_path", Input).value).resolve()),
             "rw_path": str(Path(self.query_one("#rw_path", Input).value).resolve()),
             "jupyter_token": "token123",

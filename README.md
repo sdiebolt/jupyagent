@@ -17,10 +17,6 @@
 You can run JupyAgent directly without installing it using `uvx`:
 
 ```bash
-# Export your API Key first (Required for the Agent)
-export ANTHROPIC_API_KEY="sk-..."
-
-# Run from GitHub
 uvx --from git+https://github.com/sdiebolt/jupyagent jupyagent
 ```
 
@@ -28,22 +24,15 @@ Or install it permanently:
 
 ```bash
 uv tool install git+https://github.com/sdiebolt/jupyagent
-```
-
-Then run:
-```bash
 jupyagent
 ```
 
 ## Usage
 
 1. **Setup (First Run):**
-   The tool will ask you to configure your **Read-Only System Path** (for the agent to read context) and your **Read-Write Workspace** (where the agent saves files).
+   The tool will ask you to configure your **Read-Only System Path** (for the agent to read context), your **Read-Write Workspace** (where the agent saves files), and your **API Key**.
 
 2. **Dashboard:**
    - **Start Services:** Launches Jupyter Lab and the MCP Server in the background.
    - **Launch Agent:** Drops you into the interactive Opencode Agent shell inside the Docker container.
    - **Open Jupyter:** Opens the Jupyter Lab interface in your browser.
-
-## Security Note
-API Keys are **not** stored in the configuration file. You must set the `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) environment variable in your shell before running `jupyagent`. The tool passes these variables directly to the Docker container at runtime.
