@@ -128,8 +128,8 @@ def generate_docker_files(config: dict):
     # Agent Dockerfile (Opencode)
     dockerfile_content = """FROM python:3.10-slim
 WORKDIR /workspace
-RUN pip install requests sseclient-py anthropic
-CMD ["python", "-c", "import time; print('Opencode Agent Started. (Placeholder)'); time.sleep(9999)"]
+RUN pip install opencode
+CMD ["opencode", "web"]
 """
     with open(agent_dir / "Dockerfile", "w") as f:
         f.write(dockerfile_content)
@@ -166,6 +166,8 @@ services:
 
   agent:
     build: ./agent
+    ports:
+      - "3000:3000"
     volumes:
       - ${RO_PATH}:/mnt/ro_data:ro
       - ${RW_PATH}:/workspace:rw
@@ -209,7 +211,7 @@ def cmd_setup():
 
     defaults = {
         "ro_path": "C:\\" if platform.system() == "Windows" else "/",
-        "rw_path": str(Path.home() / "llm-workspace"),
+        "rw_path": str(Path.home() / "jupyagent"),
     }
 
     # API Key
@@ -298,17 +300,17 @@ def cmd_start():
 
 
 def cmd_launch_agent():
-    console.print(
-        "[highlight]Launching Agent Terminal...[/highlight] (Type 'exit' to quit)"
-    )
+    console.print("[highlight]Starting Agent Web Interface...[/highlight]")
+    console.print("[info]Once running, open: http://localhost:3000[/info]")
     try:
         subprocess.run(
-            DOCKER_CMD + ["compose", "-f", str(COMPOSE_FILE), "run", "--rm", "agent"],
+            DOCKER_CMD + ["compose", "-f", str(COMPOSE_FILE), "up", "-d", "agent"],
             cwd=CONFIG_DIR,
-            env=os.environ.copy(),  # Pass shell env vars (like keys) if needed
+            env=os.environ.copy(),
         )
-    except KeyboardInterrupt:
-        pass
+        webbrowser.open("http://localhost:3000")
+    except subprocess.CalledProcessError:
+        console.print("[error]Failed to start Agent service.[/error]")
 
 
 def cmd_open_jupyter():
@@ -353,7 +355,7 @@ def cmd_dashboard():
 
         console.print("1. [bold green]Start[/bold green] Services")
         console.print("2. [bold red]Stop[/bold red] Services")
-        console.print("3. [bold cyan]Launch[/bold cyan] Agent Terminal")
+        console.print("3. [bold cyan]Launch[/bold cyan] Agent Web UI")
         console.print("4. [bold yellow]Open[/bold yellow] Jupyter Lab")
         console.print("5. [bold]Re-configure[/bold]")
         console.print("6. [dim]Exit[/dim]")
