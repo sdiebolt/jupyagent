@@ -142,9 +142,7 @@ CMD ["opencode", "web"]
         f.write(f"RW_PATH={config['rw_path']}\n")
 
     # docker-compose.yml
-    compose_content = """version: '3.8'
-
-services:
+    compose_content = """services:
   jupyter:
     image: jupyter/base-notebook:latest
     ports:
