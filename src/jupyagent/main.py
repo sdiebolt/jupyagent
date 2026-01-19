@@ -48,6 +48,19 @@ def check_docker():
         return False
 
 
+def check_docker_running():
+    try:
+        subprocess.run(
+            ["docker", "info"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        return True
+    except Exception:
+        return False
+
+
 def load_config():
     if CONFIG_JSON.exists():
         with open(CONFIG_JSON, "r") as f:
@@ -240,6 +253,7 @@ class DashboardScreen(Screen):
     Button { margin-bottom: 1; width: 100%; }
     .running { color: green; }
     .stopped { color: red; }
+    .spacer { height: 1; }
     """
 
     def compose(self) -> ComposeResult:
@@ -249,7 +263,7 @@ class DashboardScreen(Screen):
             Static("Status: Checking...", id="status", classes="status"),
             Button("Start Services", id="start_btn", variant="success"),
             Button("Stop Services", id="stop_btn", variant="error"),
-            Static("", style="height: 1"),  # Spacer
+            Static("", classes="spacer"),  # Spacer
             Button(
                 "Launch Agent Terminal",
                 id="launch_btn",
@@ -259,7 +273,7 @@ class DashboardScreen(Screen):
             Button(
                 "Open Jupyter Lab", id="open_jupyter", variant="default", disabled=True
             ),
-            Static("", style="height: 1"),  # Spacer
+            Static("", classes="spacer"),  # Spacer
             Button("Exit", id="exit_btn"),
         )
         yield Footer()
@@ -357,7 +371,12 @@ class JupyAgentApp(App):
 
     def on_mount(self):
         if not check_docker():
-            print("Error: Docker is not installed or running.")
+            print("Error: Docker is not installed.")
+            self.exit()
+            return
+
+        if not check_docker_running():
+            print("Error: Docker daemon is not running. Please start Docker.")
             self.exit()
             return
 
