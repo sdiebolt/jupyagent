@@ -6,23 +6,16 @@ import subprocess
 import sys
 import webbrowser
 from pathlib import Path
+from typing import Optional
 
 try:
-    from textual import on, work
-    from textual.app import App, ComposeResult
-    from textual.containers import Container
-    from textual.screen import Screen
-    from textual.widgets import (
-        Button,
-        Footer,
-        Header,
-        Input,
-        Label,
-        Log,
-        Static,
-    )
+    from rich.console import Console
+    from rich.prompt import Prompt, Confirm
+    from rich.panel import Panel
+    from rich.markdown import Markdown
+    from rich.theme import Theme
 except ImportError:
-    print("Error: 'textual' library is required.")
+    print("Error: 'rich' library is required.")
     sys.exit(1)
 
 # --- Constants ---
@@ -32,68 +25,86 @@ COMPOSE_FILE = CONFIG_DIR / "docker-compose.yml"
 ENV_FILE = CONFIG_DIR / ".env"
 CONFIG_JSON = CONFIG_DIR / "config.json"
 
+# --- Styling ---
+custom_theme = Theme(
+    {
+        "info": "dim cyan",
+        "warning": "yellow",
+        "error": "bold red",
+        "success": "bold green",
+        "highlight": "magenta",
+    }
+)
+console = Console(theme=custom_theme)
+
 # --- Logic & Helpers ---
 
 
-def check_docker():
+def check_docker(docker_cmd="docker") -> bool:
     try:
+        # Check CLI presence
         subprocess.run(
-            ["docker", "--version"],
+            [docker_cmd, "--version"],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         return True
-    except Exception:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
 
-def check_docker_running():
+def check_docker_running(docker_cmd="docker") -> bool:
     try:
+        # Check Daemon status
         subprocess.run(
-            ["docker", "info"],
+            [docker_cmd, "info"],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         return True
-    except Exception:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
 
-def load_config():
+def load_config() -> Optional[dict]:
     if CONFIG_JSON.exists():
-        with open(CONFIG_JSON, "r") as f:
-            return json.load(f)
+        try:
+            with open(CONFIG_JSON, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            return None
     return None
 
 
-def save_config(config):
+def save_config(config: dict):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_JSON, "w") as f:
         json.dump(config, f, indent=2)
 
 
-def generate_docker_files(config):
+def generate_docker_files(config: dict):
     agent_dir = CONFIG_DIR / "agent"
     agent_dir.mkdir(exist_ok=True)
 
-    # Always Opencode now
+    # Agent Dockerfile (Opencode)
     dockerfile_content = """FROM python:3.10-slim
 WORKDIR /workspace
 RUN pip install requests sseclient-py anthropic
 CMD ["python", "-c", "import time; print('Opencode Agent Started. (Placeholder)'); time.sleep(9999)"]
 """
-
     with open(agent_dir / "Dockerfile", "w") as f:
         f.write(dockerfile_content)
 
+    # .env file
     with open(ENV_FILE, "w") as f:
         f.write(f"JUPYTER_TOKEN={config.get('jupyter_token', 'secure-token')}\n")
+        f.write(f"API_KEY={config.get('api_key', '')}\n")
         f.write(f"RO_PATH={config['ro_path']}\n")
         f.write(f"RW_PATH={config['rw_path']}\n")
 
-    # Pass ANTHROPIC_API_KEY from host to container
+    # docker-compose.yml
     compose_content = """version: '3.8'
 
 services:
@@ -136,11 +147,10 @@ services:
         f.write(compose_content)
 
 
-def check_service_status():
+def is_service_running() -> bool:
     if not COMPOSE_FILE.exists():
-        return "Not Configured"
+        return False
     try:
-        # Simple check using docker compose ps
         res = subprocess.run(
             ["docker", "compose", "-f", str(COMPOSE_FILE), "ps", "--format", "json"],
             cwd=CONFIG_DIR,
@@ -148,243 +158,219 @@ def check_service_status():
             stderr=subprocess.PIPE,
             text=True,
         )
-        if "jupyter" in res.stdout and "running" in res.stdout.lower():
-            return "Running"
-        return "Stopped"
+        # Rudimentary check: simply look for running container name
+        return "jupyter" in res.stdout and "running" in res.stdout.lower()
     except Exception:
-        return "Error"
+        return False
 
 
-# --- Screens ---
+# --- Commands ---
 
 
-class SetupScreen(Screen):
-    CSS = """
-    Screen { align: center middle; }
-    Container { width: 60; border: solid green; padding: 1 2; background: $surface; }
-    Label { margin-top: 1; }
-    Input { margin-bottom: 1; }
-    Button { width: 100%; margin-top: 2; }
-    """
+def cmd_setup():
+    console.print(Panel.fit("🛠️  [bold]JupyAgent Setup[/bold]", border_style="blue"))
 
-    def compose(self) -> ComposeResult:
-        defaults = {
-            "ro_path": "C:\\" if platform.system() == "Windows" else "/",
-            "rw_path": str(Path.home() / "llm-workspace"),
-        }
+    defaults = {
+        "ro_path": "C:\\" if platform.system() == "Windows" else "/",
+        "rw_path": str(Path.home() / "llm-workspace"),
+    }
 
-        yield Container(
-            Label("[b]JupyAgent Setup[/b]", classes="header"),
-            # Removed Agent Selection (Defaulting to Opencode)
-            # Removed API Key Input
-            Label("Read-Only Path (System Drive):"),
-            Input(value=defaults["ro_path"], id="ro_path"),
-            Label("Read-Write Path (Workspace):"),
-            Input(value=defaults["rw_path"], id="rw_path"),
-            Button("Save & Install", variant="primary", id="save_btn"),
+    # API Key
+    api_key = Prompt.ask(
+        "Enter your [bold]Anthropic API Key[/bold] (stored locally)", password=True
+    )
+    if not api_key:
+        console.print(
+            "[warning]No API Key provided. Agent may not function correctly.[/warning]"
         )
 
-    @on(Button.Pressed, "#save_btn")
-    def on_save(self):
-        config = {
-            "agent_type": "opencode",
-            "ro_path": str(Path(self.query_one("#ro_path", Input).value).resolve()),
-            "rw_path": str(Path(self.query_one("#rw_path", Input).value).resolve()),
-            "jupyter_token": "token123",
-        }
+    # Paths
+    ro_path = Prompt.ask(
+        "Read-Only System Path (Context for Agent)", default=defaults["ro_path"]
+    )
+    rw_path = Prompt.ask(
+        "Read-Write Workspace Path (Agent Saves Here)", default=defaults["rw_path"]
+    )
 
-        # Create workspace
+    # Confirmation
+    console.print("\n[bold]Configuration Summary:[/bold]")
+    console.print(f"  [info]Read-Only:[/info]  {ro_path}")
+    console.print(f"  [info]Workspace:[/info]  {rw_path}")
+
+    if not Confirm.ask("Proceed with installation?", default=True):
+        console.print("[error]Aborted.[/error]")
+        sys.exit(0)
+
+    # Processing
+    config = {
+        "agent_type": "opencode",
+        "api_key": api_key,
+        "ro_path": str(Path(ro_path).resolve()),
+        "rw_path": str(Path(rw_path).resolve()),
+        "jupyter_token": "token123",
+    }
+
+    try:
         Path(config["rw_path"]).mkdir(parents=True, exist_ok=True)
-
         save_config(config)
         generate_docker_files(config)
 
-        self.app.push_screen(BuildScreen(config))
+        console.print("\n[highlight]Building Docker environment...[/highlight]")
+        subprocess.run(
+            ["docker", "compose", "-f", str(COMPOSE_FILE), "build"],
+            cwd=CONFIG_DIR,
+            check=True,
+        )
+        console.print("[success]Setup Complete![/success]")
+    except Exception as e:
+        console.print(f"[error]Setup Failed:[/error] {e}")
+        sys.exit(1)
 
 
-class BuildScreen(Screen):
-    CSS = """
-    Screen { align: center middle; }
-    Container { width: 80; height: 20; border: solid blue; background: $surface; }
-    Log { height: 1fr; border: solid gray; }
-    """
+def cmd_start():
+    if not CONFIG_JSON.exists():
+        console.print("[error]Not configured.[/error] Run setup first.")
+        cmd_setup()
 
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
+    console.print(
+        "[highlight]Starting background services (Jupyter + MCP)...[/highlight]"
+    )
+    try:
+        # We need to pass current env to docker-compose so it gets the API keys if user set them in shell,
+        # OR relies on the .env file we generated.
+        subprocess.run(
+            [
+                "docker",
+                "compose",
+                "-f",
+                str(COMPOSE_FILE),
+                "up",
+                "-d",
+                "jupyter",
+                "mcp-server",
+            ],
+            cwd=CONFIG_DIR,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        console.print("[success]Services started.[/success]")
+    except subprocess.CalledProcessError:
+        console.print("[error]Failed to start services.[/error]")
+        sys.exit(1)
 
-    def compose(self) -> ComposeResult:
-        yield Container(
-            Label("Building Environment... Please wait."), Log(id="build_log")
+
+def cmd_launch_agent():
+    console.print(
+        "[highlight]Launching Agent Terminal...[/highlight] (Type 'exit' to quit)"
+    )
+    try:
+        subprocess.run(
+            ["docker", "compose", "-f", str(COMPOSE_FILE), "run", "--rm", "agent"],
+            cwd=CONFIG_DIR,
+            env=os.environ.copy(),  # Pass shell env vars (like keys) if needed
+        )
+    except KeyboardInterrupt:
+        pass
+
+
+def cmd_open_jupyter():
+    config = load_config()
+    if config:
+        token = config.get("jupyter_token", "token123")
+        url = f"http://localhost:8888/lab?token={token}"
+        console.print(f"Opening Jupyter: [link]{url}[/link]")
+        webbrowser.open(url)
+
+
+def cmd_stop():
+    if not CONFIG_JSON.exists():
+        return
+    console.print("[warning]Stopping services...[/warning]")
+    subprocess.run(
+        ["docker", "compose", "-f", str(COMPOSE_FILE), "down"],
+        cwd=CONFIG_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    console.print("[success]Stopped.[/success]")
+
+
+def cmd_dashboard():
+    """Simple Menu-based Dashboard"""
+    while True:
+        # Status Check
+        status = (
+            "[bold green]Running[/bold green]"
+            if is_service_running()
+            else "[bold red]Stopped[/bold red]"
         )
 
-    def on_mount(self):
-        self.run_build()
-
-    @work(thread=True)
-    def run_build(self):
-        log = self.query_one(Log)
-        try:
-            # Pass current env to ensure we don't lose anything vital, though build shouldn't need keys
-            process = subprocess.Popen(
-                ["docker", "compose", "-f", str(COMPOSE_FILE), "build"],
-                cwd=CONFIG_DIR,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
+        console.clear()
+        console.print(
+            Panel.fit(
+                f"🤖 [bold]JupyAgent Dashboard[/bold]   Status: {status}",
+                border_style="blue",
             )
-            for line in process.stdout:
-                self.app.call_from_thread(log.write, line.strip())
-
-            process.wait()
-            if process.returncode == 0:
-                self.app.call_from_thread(self.app.switch_mode, "dashboard")
-            else:
-                self.app.call_from_thread(log.write, "Build Failed!")
-        except Exception as e:
-            self.app.call_from_thread(log.write, f"Error: {e}")
-
-
-class DashboardScreen(Screen):
-    CSS = """
-    Screen { align: center middle; }
-    Container { width: 60; border: solid green; padding: 1 2; background: $surface; }
-    .status { margin-bottom: 2; text-align: center; color: yellow; }
-    Button { margin-bottom: 1; width: 100%; }
-    .running { color: green; }
-    .stopped { color: red; }
-    .spacer { height: 1; }
-    """
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        yield Container(
-            Label("JupyAgent Control Panel", classes="header"),
-            Static("Status: Checking...", id="status", classes="status"),
-            Button("Start Services", id="start_btn", variant="success"),
-            Button("Stop Services", id="stop_btn", variant="error"),
-            Static("", classes="spacer"),  # Spacer
-            Button(
-                "Launch Agent Terminal",
-                id="launch_btn",
-                variant="primary",
-                disabled=True,
-            ),
-            Button(
-                "Open Jupyter Lab", id="open_jupyter", variant="default", disabled=True
-            ),
-            Static("", classes="spacer"),  # Spacer
-            Button("Exit", id="exit_btn"),
         )
-        yield Footer()
 
-    def on_mount(self):
-        self.check_status_periodic()
-        self.set_interval(5, self.check_status_periodic)
+        console.print("1. [bold green]Start[/bold green] Services")
+        console.print("2. [bold red]Stop[/bold red] Services")
+        console.print("3. [bold cyan]Launch[/bold cyan] Agent Terminal")
+        console.print("4. [bold yellow]Open[/bold yellow] Jupyter Lab")
+        console.print("5. [bold]Re-configure[/bold]")
+        console.print("6. [dim]Exit[/dim]")
 
-    def check_status_periodic(self):
-        status = check_service_status()
-        lbl = self.query_one("#status", Static)
-        start_btn = self.query_one("#start_btn", Button)
-        stop_btn = self.query_one("#stop_btn", Button)
-        launch_btn = self.query_one("#launch_btn", Button)
-        jupyter_btn = self.query_one("#open_jupyter", Button)
+        choice = Prompt.ask(
+            "\nChoose an option", choices=["1", "2", "3", "4", "5", "6"], default="6"
+        )
 
-        if status == "Running":
-            lbl.update(f"Status: [green]Running[/green]")
-            start_btn.disabled = True
-            stop_btn.disabled = False
-            launch_btn.disabled = False
-            jupyter_btn.disabled = False
-        else:
-            lbl.update(f"Status: [red]{status}[/red]")
-            start_btn.disabled = False
-            stop_btn.disabled = True
-            launch_btn.disabled = True
-            jupyter_btn.disabled = True
-
-    @on(Button.Pressed, "#start_btn")
-    def action_start(self):
-        self.notify("Starting services...")
-        self.run_docker_cmd(["up", "-d", "jupyter", "mcp-server"])
-
-    @on(Button.Pressed, "#stop_btn")
-    def action_stop(self):
-        self.notify("Stopping services...")
-        self.run_docker_cmd(["down"])
-
-    @on(Button.Pressed, "#open_jupyter")
-    def action_open_jupyter(self):
-        config = load_config()
-        if config:
-            token = config.get("jupyter_token", "token123")
-            url = f"http://localhost:8888/lab?token={token}"
-            webbrowser.open(url)
-            self.notify(f"Opened {url}")
-        else:
-            self.notify("Config missing", severity="error")
-
-    @on(Button.Pressed, "#launch_btn")
-    def action_launch(self):
-        # We need to suspend the TUI to run the interactive shell
-        self.app.suspend_application_mode()
-        try:
-            print("Launching Agent Shell... (Type 'exit' or Ctrl+C to return)")
-            # Pass environment variables to the subprocess so docker compose can pick them up
-            subprocess.run(
-                ["docker", "compose", "-f", str(COMPOSE_FILE), "run", "--rm", "agent"],
-                cwd=CONFIG_DIR,
-                env=os.environ.copy(),  # Important: Pass current env (with API keys) to docker compose
-            )
-        except Exception as e:
-            print(f"Error: {e}")
-            input("Press Enter to continue...")
-        finally:
-            self.app.resume_application_mode()
-
-    @on(Button.Pressed, "#exit_btn")
-    def action_exit(self):
-        self.app.exit()
-
-    @work(thread=True)
-    def run_docker_cmd(self, args):
-        try:
-            # Pass environment variables here too
-            subprocess.run(
-                ["docker", "compose", "-f", str(COMPOSE_FILE)] + args,
-                cwd=CONFIG_DIR,
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=os.environ.copy(),
-            )
-            self.app.call_from_thread(self.check_status_periodic)
-            action = "Started" if "up" in args else "Stopped"
-            self.app.call_from_thread(self.notify, f"Services {action} successfully!")
-        except Exception as e:
-            self.app.call_from_thread(self.notify, f"Error: {e}", severity="error")
+        if choice == "1":
+            cmd_start()
+            Prompt.ask("Press Enter to continue...")
+        elif choice == "2":
+            cmd_stop()
+            Prompt.ask("Press Enter to continue...")
+        elif choice == "3":
+            cmd_launch_agent()
+        elif choice == "4":
+            cmd_open_jupyter()
+            Prompt.ask("Press Enter to continue...")
+        elif choice == "5":
+            cmd_setup()
+            Prompt.ask("Press Enter to continue...")
+        elif choice == "6":
+            console.print("Bye!")
+            break
 
 
-class JupyAgentApp(App):
-    TITLE = "JupyAgent"
-    MODES = {"setup": SetupScreen, "dashboard": DashboardScreen}
-
-    def on_mount(self):
-        config = load_config()
-        if config:
-            self.switch_mode("dashboard")
-        else:
-            self.switch_mode("setup")
+# --- Main Entry Point ---
 
 
 def run():
+    # 1. Prerequisite Checks
     if not check_docker():
-        print("Error: Docker is not installed.")
+        console.print(
+            "[error]Error: Docker CLI not found.[/error] Please install Docker."
+        )
         sys.exit(1)
 
     if not check_docker_running():
-        print("Error: Docker daemon is not running. Please start Docker.")
+        console.print("[error]Error: Docker Daemon is not running.[/error]")
+        if platform.system() == "Linux":
+            console.print("[info]Try running: sudo systemctl start docker[/info]")
+        elif platform.system() == "Darwin":
+            console.print("[info]Please open Docker Desktop.[/info]")
         sys.exit(1)
 
-    app = JupyAgentApp()
-    app.run()
+    # 2. Logic
+    if not CONFIG_JSON.exists():
+        console.print("[warning]Configuration not found.[/warning]")
+        cmd_setup()
+
+    # 3. Launch Dashboard
+    cmd_dashboard()
+
+
+if __name__ == "__main__":
+    run()
