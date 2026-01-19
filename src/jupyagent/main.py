@@ -162,11 +162,19 @@ CMD ["opencode", "web", "--port", "3000", "--hostname", "0.0.0.0"]
     with open(agent_dir / "opencode.json", "w") as f:
         json.dump(opencode_config, f, indent=2)
 
+    # Create persistent directories for opencode config and data
+    opencode_config_dir = CONFIG_DIR / "opencode_config"
+    opencode_data_dir = CONFIG_DIR / "opencode_data"
+    opencode_config_dir.mkdir(exist_ok=True)
+    opencode_data_dir.mkdir(exist_ok=True)
+
     # .env file
     with open(ENV_FILE, "w") as f:
         f.write(f"JUPYTER_TOKEN={config.get('jupyter_token', 'secure-token')}\n")
         f.write(f"RO_PATH={config['ro_path']}\n")
         f.write(f"RW_PATH={config['rw_path']}\n")
+        f.write(f"AGENT_CONFIG_PATH={opencode_config_dir.resolve()}\n")
+        f.write(f"AGENT_DATA_PATH={opencode_data_dir.resolve()}\n")
 
     # docker-compose.yml
     compose_content = """services:
@@ -187,11 +195,13 @@ CMD ["opencode", "web", "--port", "3000", "--hostname", "0.0.0.0"]
     volumes:
       - ${RO_PATH}:/mnt/ro_data:ro
       - ${RW_PATH}:/workspace:rw
+      - ${AGENT_CONFIG_PATH}:/root/.config/opencode:rw
+      - ${AGENT_DATA_PATH}:/root/.local/share/opencode:rw
     environment:
       - JUPYTER_URL=http://jupyter:8888
       - JUPYTER_TOKEN=${JUPYTER_TOKEN}
     working_dir: /workspace
-    stdin_open: true 
+    stdin_open: true
     tty: true
     depends_on:
       - jupyter
