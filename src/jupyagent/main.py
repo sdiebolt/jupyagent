@@ -272,8 +272,6 @@ def cmd_start() -> str:
                 str(COMPOSE_FILE),
                 "up",
                 "-d",
-                "jupyter",
-                "mcp-server",
             ],
             cwd=CONFIG_DIR,
             check=True,
@@ -286,16 +284,11 @@ def cmd_start() -> str:
 
 
 def cmd_launch_agent() -> str:
-    console.print("[highlight]Starting Agent Web Interface...[/highlight]")
+    console.print("[highlight]Opening Agent Web Interface...[/highlight]")
     console.print("[info]Once running, open: http://localhost:3000[/info]")
     try:
-        subprocess.run(
-            DOCKER_CMD + ["compose", "-f", str(COMPOSE_FILE), "up", "-d", "agent"],
-            cwd=CONFIG_DIR,
-            env=os.environ.copy(),
-        )
         webbrowser.open("http://localhost:3000")
-        return "[success]Agent launched in background.[/success]"
+        return "[success]Opened web browser.[/success]"
     except subprocess.CalledProcessError:
         return "[error]Failed to start Agent service.[/error]"
 
