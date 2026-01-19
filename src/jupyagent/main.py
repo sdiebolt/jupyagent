@@ -37,14 +37,51 @@ custom_theme = Theme(
 )
 console = Console(theme=custom_theme)
 
+# --- Globals ---
+DOCKER_CMD = ["docker"]
+
 # --- Logic & Helpers ---
 
 
-def check_docker(docker_cmd="docker") -> bool:
+def detect_docker_command():
+    """Detects if we need to use 'sudo docker' or just 'docker'."""
+    global DOCKER_CMD
+
+    # Try standard docker
+    try:
+        subprocess.run(
+            ["docker", "info"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        DOCKER_CMD = ["docker"]
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    # Try sudo docker
+    if platform.system() == "Linux":
+        try:
+            subprocess.run(
+                ["sudo", "docker", "info"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            DOCKER_CMD = ["sudo", "docker"]
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
+    return False
+
+
+def check_docker() -> bool:
     try:
         # Check CLI presence
         subprocess.run(
-            [docker_cmd, "--version"],
+            ["docker", "--version"],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -54,11 +91,11 @@ def check_docker(docker_cmd="docker") -> bool:
         return False
 
 
-def check_docker_running(docker_cmd="docker") -> bool:
+def check_docker_running() -> bool:
+    # Use the detected command
     try:
-        # Check Daemon status
         subprocess.run(
-            [docker_cmd, "info"],
+            DOCKER_CMD + ["info"],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -152,7 +189,7 @@ def is_service_running() -> bool:
         return False
     try:
         res = subprocess.run(
-            ["docker", "compose", "-f", str(COMPOSE_FILE), "ps", "--format", "json"],
+            DOCKER_CMD + ["compose", "-f", str(COMPOSE_FILE), "ps", "--format", "json"],
             cwd=CONFIG_DIR,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -217,7 +254,7 @@ def cmd_setup():
 
         console.print("\n[highlight]Building Docker environment...[/highlight]")
         subprocess.run(
-            ["docker", "compose", "-f", str(COMPOSE_FILE), "build"],
+            DOCKER_CMD + ["compose", "-f", str(COMPOSE_FILE), "build"],
             cwd=CONFIG_DIR,
             check=True,
         )
@@ -239,8 +276,8 @@ def cmd_start():
         # We need to pass current env to docker-compose so it gets the API keys if user set them in shell,
         # OR relies on the .env file we generated.
         subprocess.run(
-            [
-                "docker",
+            DOCKER_CMD
+            + [
                 "compose",
                 "-f",
                 str(COMPOSE_FILE),
@@ -266,7 +303,7 @@ def cmd_launch_agent():
     )
     try:
         subprocess.run(
-            ["docker", "compose", "-f", str(COMPOSE_FILE), "run", "--rm", "agent"],
+            DOCKER_CMD + ["compose", "-f", str(COMPOSE_FILE), "run", "--rm", "agent"],
             cwd=CONFIG_DIR,
             env=os.environ.copy(),  # Pass shell env vars (like keys) if needed
         )
@@ -288,7 +325,7 @@ def cmd_stop():
         return
     console.print("[warning]Stopping services...[/warning]")
     subprocess.run(
-        ["docker", "compose", "-f", str(COMPOSE_FILE), "down"],
+        DOCKER_CMD + ["compose", "-f", str(COMPOSE_FILE), "down"],
         cwd=CONFIG_DIR,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -349,6 +386,7 @@ def cmd_dashboard():
 
 def run():
     # 1. Prerequisite Checks
+    detect_docker_command()
     if not check_docker():
         console.print(
             "[error]Error: Docker CLI not found.[/error] Please install Docker."
