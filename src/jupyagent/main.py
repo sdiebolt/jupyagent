@@ -135,7 +135,7 @@ RUN curl -fsSL https://opencode.ai/install | bash
 ENV PATH="/root/.opencode/bin:${PATH}"
 
 # Install Jupyter MCP server locally
-RUN uv pip install mcp-server-jupyter
+RUN uv pip install --system mcp-server-jupyter
 
 # Copy the pre-generated config file
 COPY opencode.json .
