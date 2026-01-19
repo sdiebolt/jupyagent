@@ -200,6 +200,7 @@ CMD ["opencode", "web", "--port", "3000", "--hostname", "0.0.0.0"]
     environment:
       - JUPYTER_URL=http://jupyter:8888
       - JUPYTER_TOKEN=${JUPYTER_TOKEN}
+      - OPENCODE_SERVER_URL=http://localhost:3000
     working_dir: /workspace
     stdin_open: true
     tty: true
