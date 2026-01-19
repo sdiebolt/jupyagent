@@ -140,7 +140,7 @@ RUN uv pip install --system mcp-server-jupyter
 # Copy the pre-generated config file
 COPY opencode.json .
 
-CMD ["opencode", "web", "--port", "3000", "--hostname", "0.0.0.0"]
+CMD ["opencode", "web", "--port", "3000", "--hostname", "0.0.0.0", "--cors", "*"]
 """
     with open(agent_dir / "Dockerfile", "w") as f:
         f.write(dockerfile_content)
