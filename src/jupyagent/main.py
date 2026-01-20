@@ -188,6 +188,7 @@ def generate_docker_files(config: dict):
     # docker-compose.yml
     compose_content = f"""services:
   jupyagent:
+    container_name: jupyagent
     build: ./jupyter
     ports:
       - "8888:8888"  # Jupyter Lab
