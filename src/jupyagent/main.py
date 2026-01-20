@@ -2,16 +2,18 @@
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
+import time
 import webbrowser
+from importlib import resources
 from pathlib import Path
 from typing import Optional
 
 try:
     import questionary
     from rich.console import Console
-    from rich.markdown import Markdown
     from rich.panel import Panel
     from rich.prompt import Confirm, Prompt
     from rich.theme import Theme
@@ -25,6 +27,7 @@ CONFIG_DIR = Path.home() / f".{APP_NAME}"
 COMPOSE_FILE = CONFIG_DIR / "docker-compose.yml"
 ENV_FILE = CONFIG_DIR / ".env"
 CONFIG_JSON = CONFIG_DIR / "config.json"
+DEFAULT_TOKEN = "jupyagent"
 
 # --- Styling ---
 custom_theme = Theme(
@@ -122,93 +125,95 @@ def save_config(config: dict):
         json.dump(config, f, indent=2)
 
 
+def get_docker_file_content(filename: str) -> str:
+    """Read a docker config file from the package."""
+    try:
+        return resources.files("jupyagent.docker").joinpath(filename).read_text()
+    except Exception:
+        # Fallback for development: read from source directory
+        docker_dir = Path(__file__).parent / "docker"
+        return (docker_dir / filename).read_text()
+
+
 def generate_docker_files(config: dict):
-    agent_dir = CONFIG_DIR / "agent"
-    agent_dir.mkdir(exist_ok=True)
+    """Generate Docker configuration files for JupyAgent."""
+    # Create jupyter directory for Docker build context
+    jupyter_dir = CONFIG_DIR / "jupyter"
+    jupyter_dir.mkdir(exist_ok=True)
 
-    # Agent Dockerfile (Opencode)
-    dockerfile_content = """FROM python:3.10-slim
-WORKDIR /workspace
-RUN apt-get update && apt-get install -y curl bash git tar
-RUN pip install uv
-RUN curl -fsSL https://opencode.ai/install | bash
-ENV PATH="/root/.opencode/bin:${PATH}"
+    # Copy all docker files from package to build context
+    docker_files = [
+        "Dockerfile",
+        "supervisord.conf",
+        "start.sh",
+        "opencode.json.template",
+        "zellij-config.kdl",
+        "register-kernel.sh",
+    ]
 
-# Install Jupyter MCP server locally
-RUN uv pip install --system mcp-server-jupyter
+    for filename in docker_files:
+        content = get_docker_file_content(filename)
+        dest_path = jupyter_dir / filename
+        with open(dest_path, "w") as f:
+            f.write(content)
+        # Make scripts executable
+        if filename.endswith(".sh"):
+            os.chmod(dest_path, 0o755)
 
-# Copy the pre-generated config file
-COPY opencode.json .
-
-CMD ["opencode", "web", "--port", "3000", "--hostname", "0.0.0.0", "--cors", "*"]
-"""
-    with open(agent_dir / "Dockerfile", "w") as f:
-        f.write(dockerfile_content)
-
-    # opencode.json (Auto-config)
-    opencode_config = {
-        "mcpServers": {
-            "jupyter": {
-                "command": "mcp-server-jupyter",
-                "args": [
-                    "--url",
-                    "http://jupyter:8888",
-                    "--token",
-                    config.get("jupyter_token", "secure-token"),
-                ],
-            }
-        }
-    }
-    with open(agent_dir / "opencode.json", "w") as f:
-        json.dump(opencode_config, f, indent=2)
-
-    # Create persistent directories for opencode config and data
+    # Create opencode directories for persistent storage
     opencode_config_dir = CONFIG_DIR / "opencode_config"
     opencode_data_dir = CONFIG_DIR / "opencode_data"
     opencode_config_dir.mkdir(exist_ok=True)
     opencode_data_dir.mkdir(exist_ok=True)
 
+    # Get configuration values
+    ro_path = config["ro_path"]
+    rw_path = config["rw_path"]
+    jupyter_token = config.get("jupyter_token", DEFAULT_TOKEN)
+    agent_config_path = str(opencode_config_dir.resolve())
+    agent_data_path = str(opencode_data_dir.resolve())
+
     # .env file
     with open(ENV_FILE, "w") as f:
-        f.write(f"JUPYTER_TOKEN={config.get('jupyter_token', 'secure-token')}\n")
-        f.write(f"RO_PATH={config['ro_path']}\n")
-        f.write(f"RW_PATH={config['rw_path']}\n")
-        f.write(f"AGENT_CONFIG_PATH={opencode_config_dir.resolve()}\n")
-        f.write(f"AGENT_DATA_PATH={opencode_data_dir.resolve()}\n")
+        f.write(f"JUPYTER_TOKEN={jupyter_token}\n")
+        f.write(f"RO_PATH={ro_path}\n")
+        f.write(f"RW_PATH={rw_path}\n")
+
+    # Conditional volume mount for mkcert certificates
+    certs_mount = ""
+    if config.get("use_mkcert"):
+        certs_path = str((CONFIG_DIR / "certs").resolve())
+        certs_mount = f"      - {certs_path}:/home/jovyan/.config/zellij/certs:ro\n"
 
     # docker-compose.yml
-    compose_content = """services:
-  jupyter:
-    image: jupyter/base-notebook:latest
+    compose_content = f"""services:
+  jupyagent:
+    build: ./jupyter
     ports:
-      - "8888:8888"
+      - "8888:8888"  # Jupyter Lab
+      - "8282:8080"  # Zellij Web Terminal
+      - "3000:3000"  # Opencode UI
     environment:
-      - JUPYTER_TOKEN=${JUPYTER_TOKEN}
+      - JUPYTER_TOKEN={jupyter_token}
     volumes:
-      - ${RO_PATH}:/mnt/ro_data:ro
-      - ${RW_PATH}:/workspace:rw # Agent and Jupyter use the same path
-
-  agent:
-    build: ./agent
-    ports:
-      - "3000:3000"
-    volumes:
-      - ${RO_PATH}:/mnt/ro_data:ro
-      - ${RW_PATH}:/workspace:rw
-      - ${AGENT_CONFIG_PATH}:/root/.config/opencode:rw
-      - ${AGENT_DATA_PATH}:/root/.local/share/opencode:rw
-    environment:
-      - JUPYTER_URL=http://jupyter:8888
-      - JUPYTER_TOKEN=${JUPYTER_TOKEN}
-      - OPENCODE_SERVER_URL=http://localhost:3000
-    working_dir: /workspace
-    stdin_open: true
-    tty: true
-    depends_on:
-      - jupyter
-"""
+      - {ro_path}:/mnt/ro_data:ro
+      - {rw_path}:/workspace:rw
+      - {agent_config_path}:/home/jovyan/.config/opencode:rw
+      - {agent_data_path}:/home/jovyan/.local/share/opencode:rw
+{certs_mount}"""
     with open(COMPOSE_FILE, "w") as f:
         f.write(compose_content)
+
+
+def cmd_open_web_terminal() -> str:
+    # Use the same token for Zellij web if we can get it?
+    # Zellij uses its own auth, but we might want to pass the token in URL if supported?
+    # Zellij doesn't support token in URL standardly, but we can try.
+    # Actually, we just need to open the link.
+    url = "https://localhost:8282"
+    console.print(f"Opening Web Terminal: [link]{url}[/link]")
+    webbrowser.open(url)
+    return f"[info]Opened Web Terminal at {url}[/info]"
 
 
 def is_service_running() -> bool:
@@ -222,8 +227,8 @@ def is_service_running() -> bool:
             stderr=subprocess.PIPE,
             text=True,
         )
-        # Rudimentary check: simply look for running container name
-        return "jupyter" in res.stdout and "running" in res.stdout.lower()
+        # Check for running container
+        return "jupyagent" in res.stdout and "running" in res.stdout.lower()
     except Exception:
         return False
 
@@ -235,7 +240,7 @@ def cmd_setup():
     console.print(Panel.fit("🛠️  [bold]JupyAgent Setup[/bold]", border_style="blue"))
 
     defaults = {
-        "ro_path": "C:\\" if platform.system() == "Windows" else "/",
+        "ro_path": "C:\\\\" if platform.system() == "Windows" else "/",
         "rw_path": str(Path.home() / "jupyagent"),
     }
 
@@ -261,18 +266,74 @@ def cmd_setup():
         "agent_type": "opencode",
         "ro_path": str(Path(ro_path).resolve()),
         "rw_path": str(Path(rw_path).resolve()),
-        "jupyter_token": "token123",
+        "jupyter_token": DEFAULT_TOKEN,
+        "use_mkcert": False,
     }
+
+    # Optional: mkcert setup
+    if shutil.which("mkcert"):
+        if Confirm.ask(
+            "mkcert found. Generate locally trusted SSL certificates?", default=True
+        ):
+            certs_dir = CONFIG_DIR / "certs"
+            certs_dir.mkdir(exist_ok=True)
+            try:
+                subprocess.run(
+                    ["mkcert", "-install"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                subprocess.run(
+                    [
+                        "mkcert",
+                        "-key-file",
+                        str(certs_dir / "key.pem"),
+                        "-cert-file",
+                        str(certs_dir / "cert.pem"),
+                        "localhost",
+                        "127.0.0.1",
+                        "::1",
+                        "0.0.0.0",
+                    ],
+                    cwd=CONFIG_DIR,
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                config["use_mkcert"] = True
+                console.print("[success]Certificates generated![/success]")
+            except Exception as e:
+                console.print(
+                    f"[warning]Failed to generate certs: {e}. Falling back to self-signed.[/warning]"
+                )
 
     try:
         Path(config["rw_path"]).mkdir(parents=True, exist_ok=True)
         save_config(config)
         generate_docker_files(config)
 
+        # Load .env to pass to subprocess
+        env = os.environ.copy()
+        with open(ENV_FILE, "r") as f:
+            for line in f:
+                if "=" in line:
+                    key, value = line.strip().split("=", 1)
+                    env[key] = value
+
         console.print("\n[highlight]Building Docker environment...[/highlight]")
         subprocess.run(
-            DOCKER_CMD + ["compose", "-f", str(COMPOSE_FILE), "build"],
+            DOCKER_CMD
+            + [
+                "compose",
+                "--env-file",
+                str(ENV_FILE),
+                "-f",
+                str(COMPOSE_FILE),
+                "build",
+            ],
             cwd=CONFIG_DIR,
+            env=env,
             check=True,
         )
         console.print("[success]Setup Complete![/success]")
@@ -287,25 +348,64 @@ def cmd_start() -> str:
         cmd_setup()
 
     console.print(
-        "[highlight]Starting background services (Jupyter + MCP)...[/highlight]"
+        "[highlight]Starting services (Jupyter + Zellij + Opencode)...[/highlight]"
     )
     try:
-        # We need to pass current env to docker-compose so it gets the API keys if user set them in shell,
-        # OR relies on the .env file we generated.
+        # Load .env manually to pass to subprocess
+        env = os.environ.copy()
+        if ENV_FILE.exists():
+            with open(ENV_FILE, "r") as f:
+                for line in f:
+                    if "=" in line:
+                        key, value = line.strip().split("=", 1)
+                        env[key] = value
+
+        # Clean up stale token file before starting
+        config = load_config() or {}
+        rw_path = config.get("rw_path")
+        token_file = None
+        if rw_path:
+            token_file = Path(rw_path) / "ZELLIJ_TOKEN.txt"
+            if token_file.exists():
+                token_file.unlink()
+
         subprocess.run(
             DOCKER_CMD
             + [
                 "compose",
+                "--env-file",
+                str(ENV_FILE),
                 "-f",
                 str(COMPOSE_FILE),
                 "up",
                 "-d",
             ],
             cwd=CONFIG_DIR,
+            env=env,
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+
+        # Wait for token file to be created (up to 30 seconds)
+        token = None
+        if token_file:
+            console.print("[info]Waiting for services to initialize...[/info]")
+            for _ in range(30):
+                if token_file.exists():
+                    content = token_file.read_text().strip()
+                    if content:
+                        token = content
+                        break
+                time.sleep(1)
+
+        # Open all three UIs in browser
+        if token:
+            console.print("[info]Opening web interfaces...[/info]")
+            webbrowser.open(f"http://localhost:8888/lab?token={token}")
+            webbrowser.open("https://localhost:8282")
+            webbrowser.open("http://localhost:3000")
+
         return "[success]Services started successfully.[/success]"
     except subprocess.CalledProcessError:
         return "[error]Failed to start services.[/error]"
@@ -324,7 +424,16 @@ def cmd_launch_agent() -> str:
 def cmd_open_jupyter() -> str:
     config = load_config()
     if config:
-        token = config.get("jupyter_token", "token123")
+        # Read token from file (generated by Zellij at container startup)
+        token_file = Path(config.get("rw_path", ".")) / "ZELLIJ_TOKEN.txt"
+        token = DEFAULT_TOKEN
+        if token_file.exists():
+            try:
+                content = token_file.read_text().strip()
+                if content:
+                    token = content
+            except Exception:
+                pass
         url = f"http://localhost:8888/lab?token={token}"
         console.print(f"Opening Jupyter: [link]{url}[/link]")
         webbrowser.open(url)
@@ -348,7 +457,6 @@ def cmd_stop() -> str:
 def cmd_dashboard(msg=""):
     """Simple Menu-based Dashboard"""
     while True:
-        # Status Check
         status = (
             "[bold green]Running[/bold green]"
             if is_service_running()
@@ -367,15 +475,30 @@ def cmd_dashboard(msg=""):
             console.print(f"{msg}\n")
             msg = ""  # Clear after displaying
 
-        # Display Access Info if running
         if is_service_running():
-            config = load_config()
-            token = config.get("jupyter_token", "token123") if config else "..."
+            config = load_config() or {}
+            # Read token from file (generated by Zellij at container startup)
+            token_file = Path(config.get("rw_path", ".")) / "ZELLIJ_TOKEN.txt"
+            token = "Waiting for token..."
+
+            if token_file.exists():
+                try:
+                    content = token_file.read_text().strip()
+                    if content:
+                        token = content
+                except Exception:
+                    pass
+
+            access_info = f"""
+[bold]Access Information:[/bold]
+  Jupyter Lab:    [link]http://localhost:8888/lab?token={token}[/link]
+  Web Terminal:   [link]https://localhost:8282[/link] (Accept cert warning)
+  Opencode UI:    [link]http://localhost:3000[/link]
+  Token:          [bold green]{token}[/bold green]
+"""
             console.print(
                 Panel(
-                    f"[bold]Access Information:[/bold]\n"
-                    f"  Jupyter Lab:  [link]http://localhost:8888/lab?token={token}[/link]\n"
-                    f"  Opencode UI:  [link]http://localhost:3000[/link]",
+                    access_info,
                     border_style="green",
                     title="Services Active",
                 )
@@ -387,6 +510,7 @@ def cmd_dashboard(msg=""):
             "Stop Services",
             "Launch Agent Web UI",
             "Open Jupyter Lab",
+            "Open Web Terminal",
             "Re-configure",
             "Exit",
         ]
@@ -418,8 +542,10 @@ def cmd_dashboard(msg=""):
             msg = cmd_launch_agent()
         elif choice == "Open Jupyter Lab":
             msg = cmd_open_jupyter()
+        elif choice == "Open Web Terminal":
+            msg = cmd_open_web_terminal()
         elif choice == "Re-configure":
-            cmd_setup()  # Setup has its own prompts
+            cmd_setup()
             msg = "[success]Configuration updated.[/success]"
         elif choice == "Exit":
             console.print("Bye!")

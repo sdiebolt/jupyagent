@@ -1,0 +1,8 @@
+// Zellij configuration for JupyAgent
+// Web server settings for browser-based terminal access
+
+web_server true
+web_server_ip "0.0.0.0"
+web_server_port 8080
+web_server_cert "/home/jovyan/.config/zellij/certs/cert.pem"
+web_server_key "/home/jovyan/.config/zellij/certs/key.pem"
