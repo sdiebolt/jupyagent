@@ -511,9 +511,9 @@ def cmd_dashboard(msg=""):
         choices = [
             "Start Services",
             "Stop Services",
-            "Launch Agent Web UI",
             "Open Jupyter Lab",
             "Open Web Terminal",
+            "Open Opencode",
             "Re-configure",
             "Exit",
         ]
@@ -541,12 +541,12 @@ def cmd_dashboard(msg=""):
             msg = cmd_start()
         elif choice == "Stop Services":
             msg = cmd_stop()
-        elif choice == "Launch Agent Web UI":
-            msg = cmd_launch_agent()
         elif choice == "Open Jupyter Lab":
             msg = cmd_open_jupyter()
         elif choice == "Open Web Terminal":
             msg = cmd_open_web_terminal()
+        elif choice == "Open Opencode":
+            msg = cmd_launch_agent()
         elif choice == "Re-configure":
             cmd_setup()
             msg = "[success]Configuration updated.[/success]"
