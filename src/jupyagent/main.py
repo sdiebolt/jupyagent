@@ -400,8 +400,10 @@ def cmd_start() -> str:
                         break
                 time.sleep(1)
 
-        # Open all three UIs in browser
+        # Open all three UIs in browser (wait a bit for services to be ready)
         if token:
+            console.print("[info]Waiting for services to be ready...[/info]")
+            time.sleep(5)
             console.print("[info]Opening web interfaces...[/info]")
             webbrowser.open(f"http://localhost:8888/lab?token={token}")
             webbrowser.open("https://localhost:8282")
