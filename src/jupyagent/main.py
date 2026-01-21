@@ -28,7 +28,7 @@ except ImportError:
 def open_browser(url: str) -> None:
     """Open a URL in the browser without printing messages."""
     with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-        open_browser(url)
+        webbrowser.open(url)
 
 # --- Constants ---
 APP_NAME = "jupyagent"
@@ -475,7 +475,7 @@ def cmd_dashboard(msg=""):
         console.print()
         console.print(
             Panel(
-                f"[bold cyan]JupyAgent[/bold cyan]  {status}",
+                f"🤖 [bold cyan]JupyAgent[/bold cyan]  {status}",
                 border_style="cyan",
                 padding=(0, 2),
             )
