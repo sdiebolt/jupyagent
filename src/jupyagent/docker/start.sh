@@ -30,11 +30,12 @@ echo "Token generated: $TOKEN"
 export JUPYTER_TOKEN="$TOKEN"
 
 # Step 3: Generate opencode MCP config with the token
-sed "s/TOKEN_PLACEHOLDER/$TOKEN/g" /home/jovyan/opencode.json.template > /home/jovyan/.config/opencode/mcp.json
-chown jovyan:users /home/jovyan/.config/opencode/mcp.json
 # Remove any invalid config files
 rm -f /home/jovyan/.config/opencode/config.json
 rm -f /home/jovyan/.config/opencode/opencode.json
+
+sed "s/TOKEN_PLACEHOLDER/$TOKEN/g" /home/jovyan/opencode.json.template > /home/jovyan/.config/opencode/opencode.json
+chown jovyan:users /home/jovyan/.config/opencode/opencode.json
 echo "Opencode MCP config generated"
 
 # Step 4: Start supervisord in background

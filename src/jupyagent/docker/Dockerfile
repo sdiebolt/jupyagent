@@ -17,8 +17,18 @@ RUN mkdir -p /opt/zellij && chown -R ${NB_UID}:${NB_GID} /opt/zellij
 ENV UV_INSTALL_DIR="/usr/local/bin"
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install Jupyter MCP server globally
-RUN uv pip install --system mcp-server-jupyter
+# Install Jupyter MCP server and collaboration dependencies
+# We use --system to install into the system python environment
+RUN uv pip install --system \
+    "jupyterlab==4.4.1" \
+    "jupyter-collaboration==4.0.2" \
+    "jupyter-mcp-tools>=0.1.4" \
+    "ipykernel" \
+    "mcp-server-jupyter"
+
+# Swap pycrdt for datalayer_pycrdt as per jupyter-mcp-server docs
+RUN uv pip uninstall --system pycrdt datalayer_pycrdt || true && \
+    uv pip install --system "datalayer_pycrdt==0.12.17"
 
 # Install Zellij
 RUN wget "https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz" -O /tmp/zellij.tar.gz && \
@@ -52,6 +62,7 @@ COPY opencode.json.template /home/jovyan/opencode.json.template
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY start.sh /usr/local/bin/start.sh
 COPY register-kernel.sh /usr/local/bin/register-kernel.sh
+COPY run-jupyter-mcp.sh /usr/local/bin/run-jupyter-mcp.sh
 
 # Configure JupyterLab dark theme
 RUN mkdir -p /home/jovyan/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
@@ -62,7 +73,8 @@ COPY jupyter_settings.json /home/jovyan/.jupyter/lab/user-settings/@jupyterlab/a
 RUN chown ${NB_UID}:${NB_GID} /home/jovyan/.config/zellij/config.kdl && \
     chown ${NB_UID}:${NB_GID} /home/jovyan/opencode.json.template && \
     chmod +x /usr/local/bin/start.sh && \
-    chmod +x /usr/local/bin/register-kernel.sh
+    chmod +x /usr/local/bin/register-kernel.sh && \
+    chmod +x /usr/local/bin/run-jupyter-mcp.sh
 
 # Create supervisor log directory
 RUN mkdir -p /var/log/supervisor && \

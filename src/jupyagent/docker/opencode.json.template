@@ -1,15 +1,16 @@
 {
-  "mcpServers": {
+  "mcp": {
     "jupyter": {
-      "command": "uv",
-      "args": [
-        "run",
-        "mcp-server-jupyter",
-        "--url",
-        "http://localhost:8888",
-        "--token",
-        "TOKEN_PLACEHOLDER"
-      ]
+      "type": "local",
+      "command": [
+        "run-jupyter-mcp.sh"
+      ],
+      "environment": {
+        "JUPYTER_URL": "http://localhost:8888",
+        "JUPYTER_TOKEN": "TOKEN_PLACEHOLDER",
+        "ALLOW_IMG_OUTPUT": "true"
+      },
+      "enabled": true
     }
   }
 }

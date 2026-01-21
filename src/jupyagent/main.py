@@ -169,6 +169,7 @@ def generate_docker_files(config: dict):
         "opencode.json.template",
         "zellij-config.kdl",
         "register-kernel.sh",
+        "run-jupyter-mcp.sh",
         "jupyter_settings.json",
     ]
 
@@ -209,6 +210,7 @@ def generate_docker_files(config: dict):
     # docker-compose.yml
     compose_content = f"""services:
   jupyagent:
+    image: jupyagent
     container_name: jupyagent
     build: ./jupyter
     ports:
