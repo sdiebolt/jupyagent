@@ -261,7 +261,7 @@ def is_service_running() -> bool:
 def cmd_setup():
     console.clear()
     console.print()
-    console.print(Panel.fit("[bold]JupyAgent Setup[/bold]", border_style="blue"))
+    console.print(Panel.fit("[bold]🔧 JupyAgent Setup[/bold]", border_style="blue"))
 
     defaults = {
         "ro_path": "/",
@@ -539,15 +539,15 @@ def cmd_dashboard(msg=""):
         console.print()
 
         choices = [
-            questionary.Choice("▶  Start Services", value="start"),
-            questionary.Choice("■  Stop Services", value="stop"),
+            questionary.Choice("▶️ Start Services", value="start"),
+            questionary.Choice("⏹️ Stop Services", value="stop"),
             questionary.Separator("─" * 30),
             questionary.Choice("📓 Open Jupyter Lab", value="jupyter"),
             questionary.Choice("💻 Open Web Terminal", value="terminal"),
             questionary.Choice("🤖 Open Opencode", value="opencode"),
             questionary.Separator("─" * 30),
-            questionary.Choice("⚙  Re-configure", value="config"),
-            questionary.Choice("✕  Exit", value="exit"),
+            questionary.Choice("⚙️ Re-configure", value="config"),
+            questionary.Choice("❌ Exit", value="exit"),
         ]
 
         choice = questionary.select(
