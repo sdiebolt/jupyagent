@@ -30,7 +30,6 @@ echo "Token generated: $TOKEN"
 export JUPYTER_TOKEN="$TOKEN"
 
 # Step 3: Generate opencode MCP config with the token
-# Note: opencode reads MCP servers from mcp.json, not config.json
 sed "s/TOKEN_PLACEHOLDER/$TOKEN/g" /home/jovyan/opencode.json.template > /home/jovyan/.config/opencode/mcp.json
 chown jovyan:users /home/jovyan/.config/opencode/mcp.json
 # Remove any invalid config files
@@ -38,12 +37,30 @@ rm -f /home/jovyan/.config/opencode/config.json
 rm -f /home/jovyan/.config/opencode/opencode.json
 echo "Opencode MCP config generated"
 
-# Step 4: Write token to workspace for dashboard access
+# Step 4: Start supervisord in background
+echo "=== Starting supervisord ==="
+/usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf &
+SUPERVISOR_PID=$!
+
+# Step 5: Wait for all services to be ready
+echo "Waiting for services to start..."
+sleep 5
+
+# Check if services are running
+for i in {1..30}; do
+    if curl -s http://localhost:8888 > /dev/null 2>&1 && \
+       curl -s http://localhost:3000 > /dev/null 2>&1; then
+        echo "All services are ready!"
+        break
+    fi
+    sleep 1
+done
+
+# Step 6: Write token to workspace (signals to dashboard that services are ready)
 echo "$TOKEN" > /workspace/ZELLIJ_TOKEN.txt
 chmod 644 /workspace/ZELLIJ_TOKEN.txt
 chown jovyan:users /workspace/ZELLIJ_TOKEN.txt
 echo "Token written to /workspace/ZELLIJ_TOKEN.txt"
 
-# Step 5: Start supervisord with the token in environment
-echo "=== Starting supervisord ==="
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+# Wait for supervisord to keep container running
+wait $SUPERVISOR_PID

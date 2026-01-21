@@ -389,22 +389,20 @@ def cmd_start() -> str:
             stderr=subprocess.DEVNULL,
         )
 
-        # Wait for token file to be created (up to 30 seconds)
+        # Wait for token file to be created to ensure all services are started.
         token = None
-        if token_file:
-            console.print("[info]Waiting for services to initialize...[/info]")
-            for _ in range(30):
-                if token_file.exists():
-                    content = token_file.read_text().strip()
-                    if content:
-                        token = content
-                        break
-                time.sleep(1)
+        with console.status("[info]Waiting for services to initialize...[/info]"):
+            if token_file:
+                for _ in range(30):
+                    if token_file.exists():
+                        content = token_file.read_text().strip()
+                        if content:
+                            token = content
+                            break
+                    time.sleep(1)
 
         # Open all three UIs in browser (wait a bit for services to be ready)
         if token:
-            console.print("[info]Waiting for services to be ready...[/info]")
-            time.sleep(5)
             console.print("[info]Opening web interfaces...[/info]")
             webbrowser.open(f"http://localhost:8888/lab?token={token}")
             webbrowser.open("https://localhost:8282")
