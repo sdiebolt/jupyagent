@@ -1,7 +1,7 @@
 [project]
 name = "jupyagent"
-version = "0.3.0"
-description = "One-command installer for Jupyter + LLM Agent sandbox"
+version = "0.1.0"
+description = "One-command installer for Jupyter + LLM agent sandbox"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
