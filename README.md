@@ -1,38 +1,46 @@
-# JupyAgent
+# 🤖 JupyAgent
 
-**JupyAgent** is a unified manager for a sandboxed LLM Agent environment. It sets up a secure workspace with a Jupyter Server, a Jupyter MCP Server, and the **Opencode** Agent.
+**JupyAgent** is a CLI tool that installs a containerized environment to run web UIs for
+a Jupyter server, an LLM agent (Opencode), and a terminal. It unifies Jupyter Lab, a
+Real-time Jupyter MCP Server, the **Opencode** Agent, and a Zellij web terminal into a
+single, easy-to-manage Docker sandbox.
 
 ## Features
-- **Secure Sandbox:** Agents are restricted to a specific workspace directory (`rw`) and can only read other drives (`ro`).
-- **Integrated Stack:** Jupyter Lab + Jupyter MCP + LLM Agent pre-wired.
-- **Cross-Platform:** Works seamlessly on Windows and Linux via Docker.
-- **TUI Dashboard:** Modern terminal interface to manage services.
+- **🛡️ Secure Sandbox:** Agents operate in an isolated Docker container with controlled read/write access.
+- **⚡ Real-time Collaboration:** Watch the agent write and execute code in Jupyter Lab in real-time via the MCP protocol.
+- **🖥️ Integrated Stack:**
+    - **Jupyter Lab:** For code execution and notebook management.
+    - **Opencode Agent:** The AI coding agent (Web UI).
+    - **Zellij:** A full-featured terminal workspace accessible via browser.
+- **🚀 One-Command Management:** A TUI dashboard to manage the entire lifecycle.
 
 ## Prerequisites
-1. **Docker:** Must be installed and running.
-2. **uv:** The Python package manager. [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
+- **Docker:** Must be installed and running.
+- **uv:** Recommended for running the tool. [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
 
-## Installation
+## Quick Start
 
-You can run JupyAgent directly without installing it using `uvx`:
+Run JupyAgent directly:
 
 ```bash
 uvx --from git+https://github.com/sdiebolt/jupyagent jupyagent
 ```
 
-Or install it permanently:
-
-```bash
-uv tool install git+https://github.com/sdiebolt/jupyagent
-jupyagent
-```
-
 ## Usage
 
-1. **Setup (First Run):**
-   The tool will ask you to configure your **Read-Only System Path** (for the agent to read context), your **Read-Write Workspace** (where the agent saves files), and your **API Key**.
+1. **Setup:** On first run, configure your workspace:
+   - **Context Path (Read-Only):** Directory the agent can read (e.g., your project root).
+   - **Workspace Path (Read-Write):** Directory where the agent creates files.
 
 2. **Dashboard:**
-   - **Start Services:** Launches Jupyter Lab and the MCP Server in the background.
-   - **Launch Agent:** Drops you into the interactive Opencode Agent shell inside the Docker container.
-   - **Open Jupyter:** Opens the Jupyter Lab interface in your browser.
+   - **▶️ Start/Stop Services:** Toggle the background Docker container.
+   - **📓 Open Jupyter Lab:** Access the notebook interface.
+   - **🤖 Open Opencode:** Access the Agent Web UI to give instructions.
+   - **💻 Open Web Terminal:** Access the Zellij terminal session.
+
+## Architecture
+JupyAgent builds a custom Docker image combining:
+- `jupyter/base-notebook`
+- `mcp-server-jupyter` (with collaboration support)
+- `opencode` CLI/Web
+- `zellij`
