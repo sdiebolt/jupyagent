@@ -259,7 +259,9 @@ def is_service_running() -> bool:
 
 
 def cmd_setup():
-    console.print(Panel.fit("🛠️  [bold]JupyAgent Setup[/bold]", border_style="blue"))
+    console.clear()
+    console.print()
+    console.print(Panel.fit("[bold]JupyAgent Setup[/bold]", border_style="blue"))
 
     defaults = {
         "ro_path": "/",
