@@ -242,7 +242,7 @@ def cmd_setup():
     console.print(Panel.fit("🛠️  [bold]JupyAgent Setup[/bold]", border_style="blue"))
 
     defaults = {
-        "ro_path": "C:\\\\" if platform.system() == "Windows" else "/",
+        "ro_path": "/",
         "rw_path": str(Path.home() / "jupyagent"),
     }
 
