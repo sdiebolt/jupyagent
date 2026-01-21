@@ -53,6 +53,10 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY start.sh /usr/local/bin/start.sh
 COPY register-kernel.sh /usr/local/bin/register-kernel.sh
 
+# Configure JupyterLab dark theme
+RUN mkdir -p /home/jovyan/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
+COPY jupyter_settings.json /home/jovyan/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
+
 
 # Set permissions
 RUN chown ${NB_UID}:${NB_GID} /home/jovyan/.config/zellij/config.kdl && \

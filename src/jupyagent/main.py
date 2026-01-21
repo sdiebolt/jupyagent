@@ -149,6 +149,7 @@ def generate_docker_files(config: dict):
         "opencode.json.template",
         "zellij-config.kdl",
         "register-kernel.sh",
+        "jupyter_settings.json",
     ]
 
     for filename in docker_files:
