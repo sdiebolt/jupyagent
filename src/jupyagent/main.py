@@ -537,48 +537,51 @@ def cmd_dashboard(msg=""):
         console.print()
 
         choices = [
-            "Start Services",
-            "Stop Services",
-            "Open Jupyter Lab",
-            "Open Web Terminal",
-            "Open Opencode",
-            "Re-configure",
-            "Exit",
+            questionary.Choice("▶  Start Services", value="start"),
+            questionary.Choice("■  Stop Services", value="stop"),
+            questionary.Separator("─" * 30),
+            questionary.Choice("📓 Open Jupyter Lab", value="jupyter"),
+            questionary.Choice("💻 Open Web Terminal", value="terminal"),
+            questionary.Choice("🤖 Open Opencode", value="opencode"),
+            questionary.Separator("─" * 30),
+            questionary.Choice("⚙  Re-configure", value="config"),
+            questionary.Choice("✕  Exit", value="exit"),
         ]
 
         choice = questionary.select(
-            "Choose an action:",
+            "",
             choices=choices,
             style=questionary.Style(
                 [
-                    ("qmark", "fg:#673ab7 bold"),
+                    ("qmark", "hidden"),
                     ("question", "bold"),
-                    ("answer", "fg:#f44336 bold"),
-                    ("pointer", "fg:#673ab7 bold"),
-                    ("highlighted", "fg:#673ab7 bold"),
-                    ("selected", "fg:#cc5454"),
-                    ("separator", "fg:#cc5454"),
-                    ("instruction", ""),
+                    ("answer", "fg:#00d7ff bold"),
+                    ("pointer", "fg:#00d7ff bold"),
+                    ("highlighted", "fg:#00d7ff bold"),
+                    ("selected", "fg:#00d7ff"),
+                    ("separator", "fg:#555555"),
+                    ("instruction", "fg:#555555"),
                     ("text", ""),
-                    ("disabled", "fg:#858585 italic"),
+                    ("disabled", "fg:#555555"),
                 ]
             ),
+            instruction="(↑/↓ to move, Enter to select)",
         ).ask()
 
-        if choice == "Start Services":
+        if choice == "start":
             msg = cmd_start()
-        elif choice == "Stop Services":
+        elif choice == "stop":
             msg = cmd_stop()
-        elif choice == "Open Jupyter Lab":
+        elif choice == "jupyter":
             msg = cmd_open_jupyter()
-        elif choice == "Open Web Terminal":
+        elif choice == "terminal":
             msg = cmd_open_web_terminal()
-        elif choice == "Open Opencode":
+        elif choice == "opencode":
             msg = cmd_launch_agent()
-        elif choice == "Re-configure":
+        elif choice == "config":
             cmd_setup()
             msg = "[success]Configuration updated.[/success]"
-        elif choice == "Exit":
+        elif choice == "exit":
             console.print("Bye!")
             break
 
