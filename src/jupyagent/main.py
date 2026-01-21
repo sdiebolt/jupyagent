@@ -7,9 +7,7 @@ import subprocess
 import sys
 import time
 import webbrowser
-from contextlib import redirect_stderr, redirect_stdout
 from importlib import resources
-from io import StringIO
 from pathlib import Path
 from typing import Optional
 
@@ -27,8 +25,22 @@ except ImportError:
 
 def open_browser(url: str) -> None:
     """Open a URL in the browser without printing messages."""
-    with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-        webbrowser.open(url)
+    if platform.system() == "Darwin":
+        subprocess.run(
+            ["open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+    elif platform.system() == "Windows":
+        subprocess.run(
+            ["start", url],
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:  # Linux
+        subprocess.run(
+            ["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
 
 # --- Constants ---
 APP_NAME = "jupyagent"
@@ -455,13 +467,13 @@ def cmd_open_jupyter() -> str:
 def cmd_stop() -> str:
     if not CONFIG_JSON.exists():
         return "[warning]Not set up.[/warning]"
-    console.print("[warning]Stopping services...[/warning]")
-    subprocess.run(
-        DOCKER_CMD + ["compose", "-f", str(COMPOSE_FILE), "down"],
-        cwd=CONFIG_DIR,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    with console.status("[warning]Stopping services...[/warning]"):
+        subprocess.run(
+            DOCKER_CMD + ["compose", "-f", str(COMPOSE_FILE), "down"],
+            cwd=CONFIG_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     return "[success]Services stopped.[/success]"
 
 
@@ -469,7 +481,11 @@ def cmd_dashboard(msg=""):
     """Simple Menu-based Dashboard"""
     while True:
         running = is_service_running()
-        status = "[bold green]● Running[/bold green]" if running else "[bold red]○ Stopped[/bold red]"
+        status = (
+            "[bold green]● Running[/bold green]"
+            if running
+            else "[bold red]○ Stopped[/bold red]"
+        )
 
         console.clear()
         console.print()
@@ -501,13 +517,25 @@ def cmd_dashboard(msg=""):
             table = Table(show_header=False, box=None, padding=(0, 2))
             table.add_column("Service", style="bold")
             table.add_column("URL")
-            table.add_row("Jupyter Lab", f"[link]http://localhost:8888/lab?token={token}[/link]")
-            table.add_row("Web Terminal", "[link]https://localhost:8282[/link] [dim](accept cert)[/dim]")
+            table.add_row(
+                "Jupyter Lab", f"[link]http://localhost:8888/lab?token={token}[/link]"
+            )
+            table.add_row(
+                "Web Terminal",
+                "[link]https://localhost:8282[/link] [dim](accept cert)[/dim]",
+            )
             table.add_row("Opencode", "[link]http://localhost:3000[/link]")
             table.add_row("Token", f"[green]{token}[/green]")
 
             console.print()
-            console.print(Panel(table, border_style="green", title="[bold]Services[/bold]", padding=(1, 2)))
+            console.print(
+                Panel(
+                    table,
+                    border_style="green",
+                    title="[bold]Services[/bold]",
+                    padding=(1, 2),
+                )
+            )
 
         console.print()
 
