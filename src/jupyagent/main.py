@@ -540,9 +540,14 @@ def cmd_dashboard(msg=""):
 
         console.print()
 
+        toggle_option = (
+            questionary.Choice("⏹️ Stop Services", value="toggle")
+            if running
+            else questionary.Choice("▶️ Start Services", value="toggle")
+        )
+
         choices = [
-            questionary.Choice("▶️ Start Services", value="start"),
-            questionary.Choice("⏹️ Stop Services", value="stop"),
+            toggle_option,
             questionary.Separator("─" * 30),
             questionary.Choice("📓 Open Jupyter Lab", value="jupyter"),
             questionary.Choice("💻 Open Web Terminal", value="terminal"),
@@ -572,10 +577,11 @@ def cmd_dashboard(msg=""):
             instruction="(↑/↓ to move, Enter to select)",
         ).ask()
 
-        if choice == "start":
-            msg = cmd_start()
-        elif choice == "stop":
-            msg = cmd_stop()
+        if choice == "toggle":
+            if running:
+                msg = cmd_stop()
+            else:
+                msg = cmd_start()
         elif choice == "jupyter":
             msg = cmd_open_jupyter()
         elif choice == "terminal":
