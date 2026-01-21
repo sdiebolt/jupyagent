@@ -25,7 +25,7 @@ from Jupyter server, an LLM agent ([OpenCode](https://opencode.ai/)), and a term
 Run JupyAgent directly:
 
 ```bash
-uvx --from git+https://github.com/sdiebolt/jupyagent jupyagent
+uvx jupyagent
 ```
 
 ## Usage
