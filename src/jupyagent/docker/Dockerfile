@@ -2,12 +2,19 @@ FROM jupyter/base-notebook:latest
 
 USER root
 
-# Install system dependencies
+# Install system dependencies and dev tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     openssl \
     curl \
     supervisor \
+    git \
+    vim \
+    nano \
+    build-essential \
+    jq \
+    htop \
+    tree \
     && rm -rf /var/lib/apt/lists/*
 
 # Create directories with proper permissions
@@ -30,25 +37,15 @@ RUN uv pip install --system \
 RUN uv pip uninstall --system pycrdt datalayer_pycrdt || true && \
     uv pip install --system "datalayer_pycrdt==0.12.17"
 
-# Install Zellij
-RUN wget "https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz" -O /tmp/zellij.tar.gz && \
-    tar -C /opt/zellij -xvf /tmp/zellij.tar.gz && rm /tmp/zellij.tar.gz
+# Install ttyd (web terminal)
+RUN wget "https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64" -O /usr/local/bin/ttyd && \
+    chmod +x /usr/local/bin/ttyd
 
-# Create all config directories first (needed before opencode install)
-RUN mkdir -p /home/jovyan/.config/zellij/certs && \
-    mkdir -p /home/jovyan/.local/share/zellij && \
-    mkdir -p /home/jovyan/.cache/zellij && \
-    mkdir -p /home/jovyan/.config/opencode && \
+# Create config directories
+RUN mkdir -p /home/jovyan/.config/opencode && \
     mkdir -p /home/jovyan/.local/share/opencode && \
     mkdir -p /home/jovyan/.claude && \
     chown -R ${NB_UID}:${NB_GID} /home/jovyan/.config /home/jovyan/.local /home/jovyan/.cache /home/jovyan/.claude
-
-# Generate self-signed certs for Zellij
-RUN openssl req -x509 -newkey rsa:4096 \
-    -keyout /home/jovyan/.config/zellij/certs/key.pem \
-    -out /home/jovyan/.config/zellij/certs/cert.pem \
-    -days 365 -nodes -subj '/CN=localhost' && \
-    chown ${NB_UID}:${NB_GID} /home/jovyan/.config/zellij/certs/*.pem
 
 # Install Opencode and Claude Code as jovyan user
 USER ${NB_USER}
@@ -60,7 +57,6 @@ RUN curl -fsSL https://claude.ai/install.sh | bash && \
 USER root
 
 # Copy configuration files
-COPY zellij-config.kdl /home/jovyan/.config/zellij/config.kdl
 COPY opencode.json.template /home/jovyan/opencode.json.template
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY start.sh /usr/local/bin/start.sh
@@ -73,8 +69,7 @@ COPY jupyter_settings.json /home/jovyan/.jupyter/lab/user-settings/@jupyterlab/a
 
 
 # Set permissions
-RUN chown ${NB_UID}:${NB_GID} /home/jovyan/.config/zellij/config.kdl && \
-    chown ${NB_UID}:${NB_GID} /home/jovyan/opencode.json.template && \
+RUN chown ${NB_UID}:${NB_GID} /home/jovyan/opencode.json.template && \
     chmod +x /usr/local/bin/start.sh && \
     chmod +x /usr/local/bin/register-kernel.sh && \
     chmod +x /usr/local/bin/run-jupyter-mcp.sh
@@ -88,7 +83,7 @@ RUN chown -R ${NB_UID}:${NB_GID} /home/jovyan
 
 # Add kernel registration alias and disable conda auto-activation (as jovyan)
 USER ${NB_USER}
-ENV PATH="/opt/zellij:/home/jovyan/.opencode/bin:/home/jovyan/.local/bin:${PATH}"
+ENV PATH="/home/jovyan/.opencode/bin:/home/jovyan/.local/bin:${PATH}"
 RUN echo '' >> ~/.bashrc && echo 'alias register-kernel="source /usr/local/bin/register-kernel.sh"' >> ~/.bashrc \
     && conda config --set auto_activate_base false
 
@@ -96,5 +91,10 @@ RUN echo '' >> ~/.bashrc && echo 'alias register-kernel="source /usr/local/bin/r
 USER root
 
 EXPOSE 8888 8080 3000 1455
+
+# 8888: Jupyter Lab
+# 8080: ttyd web terminal
+# 3000: Opencode UI
+# 1455: Opencode OAuth callback
 
 ENTRYPOINT ["/usr/local/bin/start.sh"]

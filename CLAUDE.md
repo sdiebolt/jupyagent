@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JupyAgent is a Python CLI tool that creates a secure, sandboxed LLM Agent environment using Docker. It orchestrates Jupyter Lab, Jupyter MCP Server, Opencode Agent, and Zellij web terminal in a containerized setup.
+JupyAgent is a Python CLI tool that creates a secure, sandboxed LLM Agent environment using Docker. It orchestrates Jupyter Lab, Jupyter MCP Server, Opencode Agent, Claude Code, and ttyd web terminal in a containerized setup.
 
 ## Commands
 
@@ -34,23 +34,25 @@ The entire application lives in `src/jupyagent/main.py` (~645 lines). It follows
 4. **Dashboard** (`cmd_dashboard()`) - Interactive TUI loop using questionary for service management
 
 **Key generated files (at runtime):**
-- `~/.jupyagent/jupyter/Dockerfile` - Multi-service container with Jupyter, Zellij, Opencode, and MCP server
+- `~/.jupyagent/jupyter/Dockerfile` - Multi-service container with Jupyter, ttyd, Opencode, Claude Code, and MCP server
 - `~/.jupyagent/docker-compose.yml` - Service definition with volume mounts
 - `~/.jupyagent/.env` - Environment variables for compose
 
 **Port mappings:**
 - 8888: Jupyter Lab
-- 8282: Zellij web terminal
+- 8282: ttyd web terminal
 - 3000: Opencode web UI
+- 1455: Opencode OAuth callback
 
 **Volume strategy:**
 - Read-only mount at `/mnt/ro_data` for context
 - Read-write mount at `/workspace` for agent output
 - Opencode config/data persisted to `~/.jupyagent/opencode_config/` and `~/.jupyagent/opencode_data/`
+- Claude Code config persisted to `~/.jupyagent/claude_config/`
 
 ## Key Patterns
 
 - All Docker commands go through the global `DOCKER_CMD` list (either `["docker"]` or `["sudo", "docker"]`)
 - Configuration uses JSON (`config.json`) for persistent settings
-- Zellij token is written to `/workspace/ZELLIJ_TOKEN.txt` at container startup and read by the dashboard
+- Authentication token (UUID) is generated at container startup and written to `/workspace/TOKEN.txt` and used by all services
 - The Dockerfile and compose files are generated as Python strings with variable substitution

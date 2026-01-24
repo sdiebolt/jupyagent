@@ -11,22 +11,9 @@ chown -R jovyan:users /home/jovyan/.local/share/opencode
 # Fix permissions for Claude config (~/.claude/.credentials.json)
 chown -R jovyan:users /home/jovyan/.claude 2>/dev/null || true
 
-CONFIG_FILE="/home/jovyan/.config/zellij/config.kdl"
-
-# Step 1: Generate Zellij web token (run as jovyan to access config)
-echo "Generating Zellij web token..."
-RAW_OUTPUT=$(su - jovyan -c "/opt/zellij/zellij --config $CONFIG_FILE web --create-token 2>&1")
-echo "Zellij output: $RAW_OUTPUT"
-
-# Extract token (format: "token_name token_value")
-TOKEN=$(echo "$RAW_OUTPUT" | awk '/token_/ {print $2}')
-
-if [ -z "$TOKEN" ]; then
-    echo "CRITICAL: Token extraction failed!"
-    echo "Raw output was: $RAW_OUTPUT"
-    exit 1
-fi
-
+# Step 1: Generate authentication token
+echo "Generating authentication token..."
+TOKEN=$(python3 -c "import uuid; print(str(uuid.uuid4()))")
 echo "Token generated: $TOKEN"
 
 # Step 2: Export token as environment variable for supervisord
@@ -92,18 +79,20 @@ sleep 5
 # Check if services are running
 for i in {1..30}; do
     if curl -s http://localhost:8888 > /dev/null 2>&1 && \
+       curl -s http://localhost:8080 > /dev/null 2>&1 && \
        curl -s http://localhost:3000 > /dev/null 2>&1; then
         echo "All services are ready!"
         break
     fi
+    echo "Waiting for services... (attempt $i/30)"
     sleep 1
 done
 
 # Step 6: Write token to workspace (signals to dashboard that services are ready)
-echo "$TOKEN" > /workspace/ZELLIJ_TOKEN.txt
-chmod 644 /workspace/ZELLIJ_TOKEN.txt
-chown jovyan:users /workspace/ZELLIJ_TOKEN.txt
-echo "Token written to /workspace/ZELLIJ_TOKEN.txt"
+echo "$TOKEN" > /workspace/TOKEN.txt
+chmod 644 /workspace/TOKEN.txt
+chown jovyan:users /workspace/TOKEN.txt
+echo "Token written to /workspace/TOKEN.txt"
 
 # Wait for supervisord to keep container running
 wait $SUPERVISOR_PID

@@ -181,7 +181,6 @@ def generate_docker_files(config: dict):
         "supervisord.conf",
         "start.sh",
         "opencode.json.template",
-        "zellij-config.kdl",
         "register-kernel.sh",
         "run-jupyter-mcp.sh",
         "jupyter_settings.json",
@@ -220,12 +219,6 @@ def generate_docker_files(config: dict):
         f.write(f"RO_PATH={ro_path}\n")
         f.write(f"RW_PATH={rw_path}\n")
 
-    # Conditional volume mount for mkcert certificates
-    certs_mount = ""
-    if config.get("use_mkcert"):
-        certs_path = str((CONFIG_DIR / "certs").resolve())
-        certs_mount = f"      - {certs_path}:/home/jovyan/.config/zellij/certs:ro\n"
-
     # docker-compose.yml
     compose_content = f"""services:
   jupyagent:
@@ -234,7 +227,7 @@ def generate_docker_files(config: dict):
     build: ./jupyter
     ports:
       - "8888:8888"  # Jupyter Lab
-      - "8282:8080"  # Zellij Web Terminal
+      - "8282:8080"  # ttyd Web Terminal
       - "3000:3000"  # Opencode UI
       - "1455:1455"  # Opencode OAuth callback
     environment:
@@ -246,17 +239,13 @@ def generate_docker_files(config: dict):
       - {agent_config_path}:/home/jovyan/.config/opencode:rw
       - {agent_data_path}:/home/jovyan/.local/share/opencode:rw
       - {claude_config_path}:/home/jovyan/.claude:rw
-{certs_mount}"""
+"""
     with open(COMPOSE_FILE, "w", newline="\n", encoding="utf-8") as f:
         f.write(compose_content)
 
 
 def cmd_open_web_terminal() -> str:
-    # Use the same token for Zellij web if we can get it?
-    # Zellij uses its own auth, but we might want to pass the token in URL if supported?
-    # Zellij doesn't support token in URL standardly, but we can try.
-    # Actually, we just need to open the link.
-    url = "https://localhost:8282"
+    url = "http://localhost:8282"
     console.print(f"Opening Web Terminal: [link]{url}[/link]")
     open_browser(url)
     return f"[info]Opened Web Terminal at {url}[/info]"
@@ -339,46 +328,7 @@ def cmd_setup():
         "ro_path": str(Path(ro_path).resolve()),
         "rw_path": str(Path(rw_path).resolve()),
         "jupyter_token": DEFAULT_TOKEN,
-        "use_mkcert": False,
     }
-
-    # Optional: mkcert setup
-    if shutil.which("mkcert"):
-        if Confirm.ask(
-            "mkcert found. Generate locally trusted SSL certificates?", default=True
-        ):
-            certs_dir = CONFIG_DIR / "certs"
-            certs_dir.mkdir(exist_ok=True)
-            try:
-                subprocess.run(
-                    ["mkcert", "-install"],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                subprocess.run(
-                    [
-                        "mkcert",
-                        "-key-file",
-                        str(certs_dir / "key.pem"),
-                        "-cert-file",
-                        str(certs_dir / "cert.pem"),
-                        "localhost",
-                        "127.0.0.1",
-                        "::1",
-                        "0.0.0.0",
-                    ],
-                    cwd=CONFIG_DIR,
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                config["use_mkcert"] = True
-                console.print("[success]Certificates generated![/success]")
-            except Exception as e:
-                console.print(
-                    f"[warning]Failed to generate certs: {e}. Falling back to self-signed.[/warning]"
-                )
 
     try:
         Path(config["rw_path"]).mkdir(parents=True, exist_ok=True)
@@ -420,7 +370,7 @@ def cmd_start() -> str:
         cmd_setup()
 
     with console.status(
-        "[highlight]Starting services (Jupyter + Zellij + Opencode)...[/highlight]"
+        "[highlight]Starting services (Jupyter + ttyd + Opencode)...[/highlight]"
     ):
         try:
             # Load .env manually to pass to subprocess
@@ -437,7 +387,7 @@ def cmd_start() -> str:
             rw_path = config.get("rw_path")
             token_file = None
             if rw_path:
-                token_file = Path(rw_path) / "ZELLIJ_TOKEN.txt"
+                token_file = Path(rw_path) / "TOKEN.txt"
                 if token_file.exists():
                     token_file.unlink()
 
@@ -473,7 +423,7 @@ def cmd_start() -> str:
             if token:
                 console.print("[info]Opening web interfaces...[/info]")
                 open_browser(f"http://localhost:8888/lab?token={token}")
-                open_browser("https://localhost:8282")
+                open_browser("http://localhost:8282")
                 open_browser("http://localhost:3000")
 
             return "[success]Services started successfully.[/success]"
@@ -495,7 +445,7 @@ def cmd_open_jupyter() -> str:
     config = load_config()
     if config:
         # Read token from file (generated by Zellij at container startup)
-        token_file = Path(config.get("rw_path", ".")) / "ZELLIJ_TOKEN.txt"
+        token_file = Path(config.get("rw_path", ".")) / "TOKEN.txt"
         token = DEFAULT_TOKEN
         if token_file.exists():
             try:
@@ -550,8 +500,8 @@ def cmd_dashboard(msg=""):
 
         if running:
             config = load_config() or {}
-            token_file = Path(config.get("rw_path", ".")) / "ZELLIJ_TOKEN.txt"
-            token = "Waiting..."
+            token_file = Path(config.get("rw_path", ".")) / "TOKEN.txt"
+            token = None
 
             if token_file.exists():
                 try:
@@ -564,15 +514,21 @@ def cmd_dashboard(msg=""):
             table = Table(show_header=False, box=None, padding=(0, 2))
             table.add_column("Service", style="bold")
             table.add_column("URL")
-            table.add_row(
-                "Jupyter Lab", f"[link]http://localhost:8888/lab?token={token}[/link]"
-            )
+
+            if token:
+                table.add_row(
+                    "Jupyter Lab", f"[link]http://localhost:8888/lab?token={token}[/link]"
+                )
+            else:
+                table.add_row(
+                    "Jupyter Lab", "[link]http://localhost:8888[/link] [dim](starting...)[/dim]"
+                )
+
             table.add_row(
                 "Web Terminal",
-                "[link]https://localhost:8282[/link] [dim](accept cert)[/dim]",
+                "[link]http://localhost:8282[/link]",
             )
             table.add_row("Opencode", "[link]http://localhost:3000[/link]")
-            table.add_row("Token", f"[green]{token}[/green]")
 
             console.print()
             console.print(
