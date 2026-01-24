@@ -6,9 +6,17 @@ import shutil
 import subprocess
 import sys
 import time
-from importlib import resources
+from importlib import metadata, resources
 from pathlib import Path
 from typing import Optional
+
+
+def get_version() -> str:
+    """Get the current package version."""
+    try:
+        return metadata.version("jupyagent")
+    except metadata.PackageNotFoundError:
+        return "dev"
 
 try:
     import questionary
@@ -188,12 +196,17 @@ def generate_docker_files(config: dict):
     opencode_config_dir.mkdir(exist_ok=True)
     opencode_data_dir.mkdir(exist_ok=True)
 
+    # Create claude directory for persistent storage (~/.claude/.credentials.json)
+    claude_config_dir = CONFIG_DIR / "claude_config"
+    claude_config_dir.mkdir(exist_ok=True)
+
     # Get configuration values
     ro_path = config["ro_path"]
     rw_path = config["rw_path"]
     jupyter_token = config.get("jupyter_token", DEFAULT_TOKEN)
     agent_config_path = str(opencode_config_dir.resolve())
     agent_data_path = str(opencode_data_dir.resolve())
+    claude_config_path = str(claude_config_dir.resolve())
 
     # .env file
     with open(ENV_FILE, "w") as f:
@@ -217,13 +230,16 @@ def generate_docker_files(config: dict):
       - "8888:8888"  # Jupyter Lab
       - "8282:8080"  # Zellij Web Terminal
       - "3000:3000"  # Opencode UI
+      - "1455:1455"  # Opencode OAuth callback
     environment:
       - JUPYTER_TOKEN={jupyter_token}
+      - CLAUDE_CONFIG_DIR=/home/jovyan/.claude
     volumes:
       - {ro_path}:/mnt/ro_data:ro
       - {rw_path}:/workspace:rw
       - {agent_config_path}:/home/jovyan/.config/opencode:rw
       - {agent_data_path}:/home/jovyan/.local/share/opencode:rw
+      - {claude_config_path}:/home/jovyan/.claude:rw
 {certs_mount}"""
     with open(COMPOSE_FILE, "w") as f:
         f.write(compose_content)
@@ -265,18 +281,41 @@ def cmd_setup():
     console.print()
     console.print(Panel.fit("[bold]🔧 JupyAgent Setup[/bold]", border_style="blue"))
 
+    # Load existing config if available
+    existing_config = load_config()
+
     defaults = {
-        "ro_path": "/",
-        "rw_path": str(Path.home() / "jupyagent"),
+        "ro_path": existing_config.get("ro_path", "/") if existing_config else "/",
+        "rw_path": existing_config.get("rw_path", str(Path.home() / "jupyagent"))
+        if existing_config
+        else str(Path.home() / "jupyagent"),
     }
 
-    # Paths
-    ro_path = Prompt.ask(
-        "Read-Only System Path (Context for Agent)", default=defaults["ro_path"]
-    )
-    rw_path = Prompt.ask(
-        "Read-Write Workspace Path (Agent Saves Here)", default=defaults["rw_path"]
-    )
+    # If paths are already configured, ask if user wants to change them
+    if existing_config and existing_config.get("ro_path") and existing_config.get("rw_path"):
+        console.print("[bold]Current paths:[/bold]")
+        console.print(f"  [info]Read-Only:[/info]  {defaults['ro_path']}")
+        console.print(f"  [info]Workspace:[/info]  {defaults['rw_path']}")
+        console.print()
+
+        if Confirm.ask("Keep existing paths?", default=True):
+            ro_path = defaults["ro_path"]
+            rw_path = defaults["rw_path"]
+        else:
+            ro_path = Prompt.ask(
+                "Read-Only System Path (Context for Agent)", default=defaults["ro_path"]
+            )
+            rw_path = Prompt.ask(
+                "Read-Write Workspace Path (Agent Saves Here)", default=defaults["rw_path"]
+            )
+    else:
+        # First-time setup: always prompt for paths
+        ro_path = Prompt.ask(
+            "Read-Only System Path (Context for Agent)", default=defaults["ro_path"]
+        )
+        rw_path = Prompt.ask(
+            "Read-Write Workspace Path (Agent Saves Here)", default=defaults["rw_path"]
+        )
 
     # Confirmation
     console.print("\n[bold]Configuration Summary:[/bold]")
@@ -289,6 +328,7 @@ def cmd_setup():
 
     # Processing
     config = {
+        "version": get_version(),
         "agent_type": "opencode",
         "ro_path": str(Path(ro_path).resolve()),
         "rw_path": str(Path(rw_path).resolve()),
@@ -620,6 +660,18 @@ def run():
     if not CONFIG_JSON.exists():
         console.print("[warning]Configuration not found.[/warning]")
         cmd_setup()
+    else:
+        # Check for version mismatch
+        config = load_config()
+        current_version = get_version()
+        config_version = config.get("version") if config else None
+
+        if config_version != current_version:
+            console.print(
+                f"[warning]New version detected:[/warning] {config_version or 'unknown'} → {current_version}"
+            )
+            if Confirm.ask("Re-configure to apply updates?", default=True):
+                cmd_setup()
 
     # 3. Launch Dashboard
     cmd_dashboard()

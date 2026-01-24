@@ -40,7 +40,8 @@ RUN mkdir -p /home/jovyan/.config/zellij/certs && \
     mkdir -p /home/jovyan/.cache/zellij && \
     mkdir -p /home/jovyan/.config/opencode && \
     mkdir -p /home/jovyan/.local/share/opencode && \
-    chown -R ${NB_UID}:${NB_GID} /home/jovyan/.config /home/jovyan/.local /home/jovyan/.cache
+    mkdir -p /home/jovyan/.claude && \
+    chown -R ${NB_UID}:${NB_GID} /home/jovyan/.config /home/jovyan/.local /home/jovyan/.cache /home/jovyan/.claude
 
 # Generate self-signed certs for Zellij
 RUN openssl req -x509 -newkey rsa:4096 \
@@ -49,11 +50,13 @@ RUN openssl req -x509 -newkey rsa:4096 \
     -days 365 -nodes -subj '/CN=localhost' && \
     chown ${NB_UID}:${NB_GID} /home/jovyan/.config/zellij/certs/*.pem
 
-# Install Opencode as jovyan user
+# Install Opencode and Claude Code as jovyan user
 USER ${NB_USER}
 ENV HOME=/home/jovyan
 RUN curl -fsSL https://opencode.ai/install | bash && \
     /home/jovyan/.opencode/bin/opencode --version
+RUN curl -fsSL https://claude.ai/install.sh | bash && \
+    /home/jovyan/.local/bin/claude --version
 USER root
 
 # Copy configuration files
@@ -85,13 +88,13 @@ RUN chown -R ${NB_UID}:${NB_GID} /home/jovyan
 
 # Add kernel registration alias and disable conda auto-activation (as jovyan)
 USER ${NB_USER}
-ENV PATH="/opt/zellij:/home/jovyan/.opencode/bin:${PATH}"
+ENV PATH="/opt/zellij:/home/jovyan/.opencode/bin:/home/jovyan/.local/bin:${PATH}"
 RUN echo '' >> ~/.bashrc && echo 'alias register-kernel="source /usr/local/bin/register-kernel.sh"' >> ~/.bashrc \
     && conda config --set auto_activate_base false
 
 # Switch back to root for entrypoint (supervisord needs root)
 USER root
 
-EXPOSE 8888 8080 3000
+EXPOSE 8888 8080 3000 1455
 
 ENTRYPOINT ["/usr/local/bin/start.sh"]

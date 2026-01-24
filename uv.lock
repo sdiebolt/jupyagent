@@ -8,8 +8,8 @@ resolution-markers = [
 
 [[package]]
 name = "jupyagent"
-version = "0.3.0"
-source = { editable = "." }
+version = "0.1.0"
+source = { virtual = "." }
 dependencies = [
     { name = "questionary" },
     { name = "rich" },
