@@ -1,6 +1,6 @@
 [project]
 name = "jupyagent"
-version = "0.2.0"
+version = "0.3.0"
 description = "One-command installer for Jupyter + LLM agent sandbox"
 readme = "README.md"
 license = "MIT"
