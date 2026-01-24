@@ -32,21 +32,27 @@ except ImportError:
 
 def open_browser(url: str) -> None:
     """Open a URL in the browser without printing messages."""
-    if platform.system() == "Darwin":
-        subprocess.run(
-            ["open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-    elif platform.system() == "Windows":
-        subprocess.run(
-            ["start", url],
-            shell=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    else:  # Linux
-        subprocess.run(
-            ["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+    try:
+        if platform.system() == "Darwin":
+            subprocess.run(
+                ["open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        elif platform.system() == "Windows":
+            subprocess.run(
+                ["start", url],
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:  # Linux
+            subprocess.run(
+                ["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+    except (FileNotFoundError, OSError):
+        # Fallback if browser command is missing (common in WSL or headless servers)
+        # We use print because 'console' might not be fully initialized or accessible depending on scope,
+        # though it is global. Using print is safe.
+        print(f"\nUnable to open browser automatically. Please open: {url}")
 
 
 # --- Constants ---
@@ -184,7 +190,7 @@ def generate_docker_files(config: dict):
     for filename in docker_files:
         content = get_docker_file_content(filename)
         dest_path = jupyter_dir / filename
-        with open(dest_path, "w") as f:
+        with open(dest_path, "w", newline="\n", encoding="utf-8") as f:
             f.write(content)
         # Make scripts executable
         if filename.endswith(".sh"):
@@ -209,7 +215,7 @@ def generate_docker_files(config: dict):
     claude_config_path = str(claude_config_dir.resolve())
 
     # .env file
-    with open(ENV_FILE, "w") as f:
+    with open(ENV_FILE, "w", newline="\n", encoding="utf-8") as f:
         f.write(f"JUPYTER_TOKEN={jupyter_token}\n")
         f.write(f"RO_PATH={ro_path}\n")
         f.write(f"RW_PATH={rw_path}\n")
@@ -241,7 +247,7 @@ def generate_docker_files(config: dict):
       - {agent_data_path}:/home/jovyan/.local/share/opencode:rw
       - {claude_config_path}:/home/jovyan/.claude:rw
 {certs_mount}"""
-    with open(COMPOSE_FILE, "w") as f:
+    with open(COMPOSE_FILE, "w", newline="\n", encoding="utf-8") as f:
         f.write(compose_content)
 
 
