@@ -419,28 +419,28 @@ def cmd_start() -> str:
         console.print("[error]Not configured.[/error] Run setup first.")
         cmd_setup()
 
-    with console.status(
-        "[highlight]Starting services (Jupyter + ttyd + Opencode)...[/highlight]"
-    ):
-        try:
-            # Load .env manually to pass to subprocess
-            env = os.environ.copy()
-            if ENV_FILE.exists():
-                with open(ENV_FILE, "r") as f:
-                    for line in f:
-                        if "=" in line:
-                            key, value = line.strip().split("=", 1)
-                            env[key] = value
+    try:
+        # Load .env manually to pass to subprocess
+        env = os.environ.copy()
+        if ENV_FILE.exists():
+            with open(ENV_FILE, "r") as f:
+                for line in f:
+                    if "=" in line:
+                        key, value = line.strip().split("=", 1)
+                        env[key] = value
 
-            # Clean up stale token file before starting
-            config = load_config() or {}
-            rw_path = config.get("rw_path")
-            token_file = None
-            if rw_path:
-                token_file = Path(rw_path) / "TOKEN.txt"
-                if token_file.exists():
-                    token_file.unlink()
+        # Clean up stale token file before starting
+        config = load_config() or {}
+        rw_path = config.get("rw_path")
+        token_file = None
+        if rw_path:
+            token_file = Path(rw_path) / "TOKEN.txt"
+            if token_file.exists():
+                token_file.unlink()
 
+        with console.status(
+            "[highlight]Starting services (Jupyter + ttyd + Opencode)...[/highlight]"
+        ):
             subprocess.run(
                 DOCKER_CMD
                 + [
@@ -470,15 +470,16 @@ def cmd_start() -> str:
                             break
                     time.sleep(1)
 
-            if token:
-                console.print("[info]Opening web interfaces...[/info]")
-                open_browser(f"http://localhost:8888/lab?token={token}")
-                open_browser("http://localhost:8282")
-                open_browser("http://localhost:3000")
+        # Open browsers after spinner is done
+        if token:
+            console.print("[info]Opening web interfaces...[/info]")
+            open_browser(f"http://localhost:8888/lab?token={token}")
+            open_browser("http://localhost:8282")
+            open_browser("http://localhost:3000")
 
-            return "[success]Services started successfully.[/success]"
-        except subprocess.CalledProcessError:
-            return "[error]Failed to start services.[/error]"
+        return "[success]Services started successfully.[/success]"
+    except subprocess.CalledProcessError:
+        return "[error]Failed to start services.[/error]"
 
 
 def cmd_launch_agent() -> str:
