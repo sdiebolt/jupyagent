@@ -271,6 +271,56 @@ def is_service_running() -> bool:
 # --- Commands ---
 
 
+def show_help():
+    """Display help/about information."""
+    console.clear()
+    console.print()
+    console.print(
+        Panel.fit(
+            "[bold cyan]🤖 About JupyAgent[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+    console.print()
+
+    help_text = """[bold]What is JupyAgent?[/bold]
+
+JupyAgent creates a secure, containerized environment for AI coding agents to work with Jupyter notebooks. It combines Jupyter Lab, AI agents (OpenCode & Claude Code), and development tools in a single Docker container.
+
+[bold]Key Components:[/bold]
+
+• [cyan]Jupyter Lab[/cyan] - Interactive notebook environment where agents can execute code
+• [cyan]OpenCode & Claude Code[/cyan] - AI coding agents that can write and run code
+• [cyan]Jupyter MCP Server[/cyan] - Model Context Protocol server that lets agents interact with Jupyter notebooks in real-time
+• [cyan]Web Terminal[/cyan] - Browser-based terminal for direct access to the container
+• [cyan]Dev Tools[/cyan] - git, vim, nano, build-essential, and more
+
+[bold]Path Configuration:[/bold]
+
+• [green]Read-Only Path[/green] - Directory the agents can read but not modify (e.g., your existing codebase or data). Mounted at [dim]/mnt/ro_data[/dim] inside the container.
+
+• [yellow]Read-Write Path[/yellow] - Directory where agents can create and modify files (e.g., your project workspace). Mounted at [dim]/workspace[/dim] inside the container.
+
+[bold]How It Works:[/bold]
+
+1. Both OpenCode and Claude Code connect to the Jupyter MCP server
+2. Agents can create notebooks, execute code, and see results in real-time
+3. All work happens in the isolated Docker container
+4. Your files in the read-write path are preserved between sessions
+
+[bold]Authentication:[/bold]
+
+• Jupyter Lab uses an auto-generated token (embedded in URLs)
+• Web terminal has no authentication (localhost only)
+• OpenCode and Claude Code use persistent authentication
+
+For more info: [link]https://github.com/sdiebolt/jupyagent[/link]"""
+
+    console.print(Panel(help_text, border_style="cyan", padding=(1, 2)))
+    console.print()
+    Prompt.ask("[dim]Press Enter to continue[/dim]", default="")
+
+
 def cmd_setup():
     console.clear()
     console.print()
@@ -556,6 +606,7 @@ def cmd_dashboard(msg=""):
             questionary.Choice("🤖 Open Opencode", value="opencode"),
             questionary.Separator("─" * 30),
             questionary.Choice("⚙️ Re-configure", value="config"),
+            questionary.Choice("ℹ️  Help", value="help"),
             questionary.Choice("❌ Exit", value="exit"),
         ]
 
@@ -593,6 +644,8 @@ def cmd_dashboard(msg=""):
         elif choice == "config":
             cmd_setup()
             msg = "[success]Configuration updated.[/success]"
+        elif choice == "help":
+            show_help()
         elif choice == "exit":
             console.print("Bye!")
             break
@@ -620,7 +673,8 @@ def run():
 
     # 2. Logic
     if not CONFIG_JSON.exists():
-        console.print("[warning]Configuration not found.[/warning]")
+        # First-time setup: show help
+        show_help()
         cmd_setup()
     else:
         # Check for version mismatch
